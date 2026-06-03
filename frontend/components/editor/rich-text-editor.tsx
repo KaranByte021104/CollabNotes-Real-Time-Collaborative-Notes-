@@ -45,27 +45,33 @@ function buildCursorExtension(
     name: 'collaborationCursor',
 
     addProseMirrorPlugins() {
-      // Build a custom cursor DOM element matching our design system
+      // Thin caret-style cursor — name label only appears on hover via CSS
       const cursorBuilder = (u: { name: string; color: string }) => {
         const cursor = document.createElement('span');
-        cursor.classList.add('ProseMirror-yjs-cursor');
-        cursor.style.setProperty('border-color', u.color);
+        cursor.classList.add('collab-cursor');
+        cursor.style.setProperty('--cursor-color', u.color);
 
-        const label = document.createElement('div');
-        label.style.setProperty('background-color', u.color);
+        // Name label — hidden by default, visible on cursor hover
+        const label = document.createElement('span');
+        label.classList.add('collab-cursor__label');
         label.textContent = u.name;
         cursor.appendChild(label);
 
         return cursor;
       };
 
-      // Set local user on awareness so remote users see who we are
+      // Very subtle selection highlight (15% opacity) instead of a solid block
+      const selectionBuilder = (u: { name: string; color: string }) => ({
+        style: `background-color: ${u.color}26`,
+      });
+
+      // Broadcast our identity so remote users see our name + color
       awareness.setLocalStateField('user', {
         name: user.name,
         color: user.color,
       });
 
-      return [yCursorPlugin(awareness, { cursorBuilder })];
+      return [yCursorPlugin(awareness, { cursorBuilder, selectionBuilder })];
     },
   });
 }

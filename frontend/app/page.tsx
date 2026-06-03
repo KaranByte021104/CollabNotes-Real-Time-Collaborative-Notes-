@@ -1,6 +1,7 @@
+import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Sparkles, Users, Zap, ArrowRight, Github } from "lucide-react";
+import { FileText, Sparkles, Users, Zap, ArrowRight, Github, BookOpen } from "lucide-react";
 
 export default function Home() {
   return (
@@ -29,25 +30,30 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Action Buttons with Shadcn */}
+        {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Button 
-            id="btn-get-started"
-            size="lg" 
-            className="w-full sm:w-auto font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
-          >
-            Get Started Free
-            <ArrowRight className="ml-2 size-4" />
-          </Button>
+          <Link href="/register">
+            <Button 
+              id="btn-get-started"
+              size="lg" 
+              className="w-full sm:w-auto font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              Get Started Free
+              <ArrowRight className="ml-2 size-4" />
+            </Button>
+          </Link>
           
-          <Button 
-            id="btn-view-docs"
-            variant="outline" 
-            size="lg" 
-            className="w-full sm:w-auto font-semibold border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 transition-all"
-          >
-            Documentation
-          </Button>
+          <Link href="/dashboard">
+            <Button 
+              id="btn-view-docs"
+              variant="outline" 
+              size="lg" 
+              className="w-full sm:w-auto font-semibold border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 transition-all"
+            >
+              <BookOpen className="mr-2 size-4" />
+              Go to Dashboard
+            </Button>
+          </Link>
         </div>
 
         {/* Features / Preview Mock Cards */}

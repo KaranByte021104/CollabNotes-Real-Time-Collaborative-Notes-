@@ -223,8 +223,11 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
             </div>
           </div>
 
-          {/* Rich-Text collaborative Tiptap Editor */}
+          {/* Rich-Text collaborative Tiptap Editor
+              key=ydoc.guid forces a full remount if a new Y.Doc instance is created,
+              ensuring the editor is always bound to the current (synced) document. */}
           <RichTextEditor 
+            key={ydoc.guid}
             ydoc={ydoc}
             awareness={awareness}
             currentUser={currentUser}

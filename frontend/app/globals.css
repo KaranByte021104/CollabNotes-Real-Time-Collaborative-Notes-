@@ -130,29 +130,58 @@
   }
 }
 
-/* Collaboration cursor styles */
-.collaboration-cursor__caret {
-  border-left: 2px solid;
-  border-right: 2px solid;
+/* ── Collaborative cursor styles ─────────────────────────────────── */
+
+/* The caret: a thin 2px vertical line in the user's color */
+.collab-cursor {
+  position: relative;
+  display: inline-block;
+  width: 2px;
+  background-color: var(--cursor-color, #6366f1);
   margin-left: -1px;
   margin-right: -1px;
-  pointer-events: none;
-  position: relative;
-  word-break: normal;
+  /* Gentle blinking animation so it looks like a real caret */
+  animation: collab-blink 1.2s ease-in-out infinite;
+  pointer-events: auto;
+  cursor: default;
+  /* Ensure it doesn't collapse in empty paragraphs */
+  vertical-align: text-top;
+  height: 1.2em;
 }
 
-.collaboration-cursor__label {
-  border-radius: 3px 3px 3px 0;
-  color: white;
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 600;
-  left: -1px;
-  line-height: normal;
-  padding: 0.1rem 0.3rem;
+/* Blinking caret animation */
+@keyframes collab-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* The name label: hidden by default, slides in on hover */
+.collab-cursor__label {
   position: absolute;
-  top: -1.5em;
-  user-select: none;
+  bottom: calc(100% + 4px);
+  left: -1px;
+  background-color: var(--cursor-color, #6366f1);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  font-style: normal;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px 4px 4px 0;
   white-space: nowrap;
-  z-index: 10;
+  pointer-events: none;
+  user-select: none;
+  z-index: 20;
+
+  /* Hidden by default — smooth fade + slide in */
+  opacity: 0;
+  transform: translateY(4px) scale(0.9);
+  transform-origin: bottom left;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+/* Show label when cursor is hovered */
+.collab-cursor:hover .collab-cursor__label {
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }

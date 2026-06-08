@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Sparkles, Users, Zap, ArrowRight, Github, BookOpen } from "lucide-react";
+import { FileText, Users, Zap, ArrowRight, BookOpen } from "lucide-react";
+
 
 export default function Home() {
   return (
@@ -16,10 +17,7 @@ export default function Home() {
         
         {/* Header Hero Section */}
         <div className="space-y-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/50 text-indigo-600 dark:text-indigo-400 text-sm font-medium animate-fade-in">
-            <Sparkles className="size-4" />
-            <span>Now in Beta</span>
-          </div>
+
 
           <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             Meet <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400">CollabNotes</span>
@@ -100,13 +98,7 @@ export default function Home() {
         {/* Footer */}
         <div className="pt-12 text-slate-400 dark:text-slate-600 text-sm flex flex-col sm:flex-row items-center justify-between border-t border-slate-200/50 dark:border-slate-800/50">
           <p>© {new Date().getFullYear()} CollabNotes. All rights reserved.</p>
-          <a 
-            href="#" 
-            className="flex items-center gap-2 hover:text-slate-600 dark:hover:text-slate-400 transition-colors mt-2 sm:mt-0"
-          >
-            <Github className="size-4" />
-            <span>GitHub Repository</span>
-          </a>
+
         </div>
 
       </div>

@@ -14,6 +14,7 @@ import * as Y from 'yjs';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import { EditorToolbar } from './editor-toolbar';
 import { AlertTriangle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface RichTextEditorProps {
   ydoc: Y.Doc;
@@ -24,6 +25,13 @@ interface RichTextEditorProps {
   };
   editable?: boolean;
   setSnapshotCallback?: (fn: () => string) => void;
+  isConnected?: boolean;
+  isReconnecting?: boolean;
+  reconnectFailed?: boolean;
+  noteTitle: string;
+  isCreator?: boolean;
+  isLocked?: boolean;
+  onToggleLock?: () => void;
 }
 
 /**
@@ -82,6 +90,13 @@ export function RichTextEditor({
   currentUser,
   editable = true,
   setSnapshotCallback,
+  isConnected = true,
+  isReconnecting = false,
+  reconnectFailed = false,
+  noteTitle,
+  isCreator = false,
+  isLocked = false,
+  onToggleLock,
 }: RichTextEditorProps) {
   const editor = useEditor(
     {
@@ -151,15 +166,40 @@ export function RichTextEditor({
   return (
     <div className="flex-1 flex flex-col border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 shadow-sm relative group">
 
-      {/* Formatting Controls */}
-      <EditorToolbar editor={editor} editable={editable} />
+      <EditorToolbar 
+        editor={editor} 
+        editable={editable && (!isLocked || isCreator)} 
+        noteTitle={noteTitle} 
+        isCreator={isCreator}
+        isLocked={isLocked}
+        onToggleLock={onToggleLock}
+      />
 
-      {/* Offline Warning Banner */}
-      {!editable && (
-        <div className="bg-amber-50 dark:bg-amber-950/20 border-b border-amber-100 dark:border-amber-900/30 p-3 text-amber-800 dark:text-amber-300 flex items-center gap-2 text-xs font-semibold">
-          <AlertTriangle className="size-4 text-amber-600 dark:text-amber-500" />
-          <span>⚠️ Connection lost. Your changes will sync when reconnected.</span>
-        </div>
+      {/* Connection Banners */}
+      {!isConnected && (
+        <>
+          {reconnectFailed ? (
+            <div className="bg-red-55/90 dark:bg-red-950/30 border-b border-red-100 dark:border-red-900/30 p-3 text-red-800 dark:text-red-300 flex items-center justify-between gap-2 text-xs font-semibold animate-in fade-in duration-300">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="size-4 text-red-600 dark:text-red-500" />
+                <span>Unable to reconnect. Please refresh the page.</span>
+              </div>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => window.location.reload()}
+                className="h-7 px-3 text-xs bg-red-600 hover:bg-red-700 text-white font-medium rounded-md shadow-sm border-0 cursor-pointer"
+              >
+                Refresh
+              </Button>
+            </div>
+          ) : (
+            <div className="bg-amber-50 dark:bg-amber-950/20 border-b border-amber-100 dark:border-amber-900/30 p-3 text-amber-800 dark:text-amber-300 flex items-center gap-2 text-xs font-semibold animate-in fade-in duration-300">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-amber-600 dark:border-amber-550" />
+              <span>⚠️ Connection lost. Attempting to reconnect...</span>
+            </div>
+          )}
+        </>
       )}
 
       {/* Editor Content Area */}

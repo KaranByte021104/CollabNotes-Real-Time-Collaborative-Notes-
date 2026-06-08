@@ -1,5 +1,5 @@
 import React from 'react';
-import { History, UserPlus, UserMinus, FileEdit, Clock } from 'lucide-react';
+import { History, UserPlus, UserMinus, FileEdit, Clock, PlusCircle, Trash2 } from 'lucide-react';
 import { formatRelativeTime } from '@/lib/utils';
 
 export interface ActivityLog {
@@ -9,6 +9,8 @@ export interface ActivityLog {
   metadata: {
     name?: string;
     userName?: string;
+    noteTitle?: string;
+    removedUserName?: string;
   };
 }
 
@@ -30,10 +32,17 @@ export function ActivityFeed({ logs }: ActivityFeedProps) {
         };
       case 'user_left':
         return {
-          message: `${name} left the workspace`,
-          icon: <UserMinus className="size-3.5 text-orange-500" />,
-          bgColor: 'bg-orange-50 dark:bg-orange-950/20',
-          borderColor: 'border-orange-100 dark:border-orange-900/20',
+          message: `${name} left the workspace entirely`,
+          icon: <UserMinus className="size-3.5 text-red-500" />,
+          bgColor: 'bg-red-50 dark:bg-red-950/20',
+          borderColor: 'border-red-100 dark:border-red-900/20',
+        };
+      case 'member_removed':
+        return {
+          message: `${name} removed ${log.metadata?.removedUserName || 'a member'} from the workspace`,
+          icon: <UserMinus className="size-3.5 text-red-500" />,
+          bgColor: 'bg-red-50 dark:bg-red-950/20',
+          borderColor: 'border-red-100 dark:border-red-900/20',
         };
       case 'note_updated':
         return {
@@ -42,9 +51,23 @@ export function ActivityFeed({ logs }: ActivityFeedProps) {
           bgColor: 'bg-blue-50 dark:bg-blue-950/20',
           borderColor: 'border-blue-100 dark:border-blue-900/20',
         };
+      case 'note_created':
+        return {
+          message: `${name} created note "${log.metadata?.noteTitle || 'Untitled Note'}"`,
+          icon: <PlusCircle className="size-3.5 text-green-500" />,
+          bgColor: 'bg-green-50 dark:bg-green-950/20',
+          borderColor: 'border-green-100 dark:border-green-900/20',
+        };
+      case 'note_deleted':
+        return {
+          message: `${name} deleted note "${log.metadata?.noteTitle || 'Untitled Note'}"`,
+          icon: <Trash2 className="size-3.5 text-slate-500" />,
+          bgColor: 'bg-slate-50 dark:bg-slate-900/20',
+          borderColor: 'border-slate-100 dark:border-slate-800/20',
+        };
       default:
         return {
-          message: `${name} triggered ${log.eventType}`,
+          message: `${name} triggered ${log.eventType.replace('_', ' ')}`,
           icon: <Clock className="size-3.5 text-slate-500" />,
           bgColor: 'bg-slate-50 dark:bg-slate-900/20',
           borderColor: 'border-slate-100 dark:border-slate-800/20',

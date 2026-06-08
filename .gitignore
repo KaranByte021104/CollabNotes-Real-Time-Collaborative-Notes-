@@ -33,3 +33,7 @@ prebuild/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Project-specific ignores
+sprints/
+

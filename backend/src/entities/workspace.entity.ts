@@ -19,11 +19,17 @@ export class Workspace {
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 
+  @Column({ type: 'boolean', default: false })
+  isArchived: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  archivedAt: Date | null;
+
   @ManyToOne(() => User, (user) => user.ownedWorkspaces, { onDelete: 'CASCADE' })
   createdBy: User;
 
-  @OneToOne(() => Note, (note) => note.workspace, { cascade: true })
-  note: Note;
+  @OneToMany(() => Note, (note) => note.workspace, { cascade: true })
+  notes: Note[];
 
   @OneToMany(() => WorkspaceParticipant, (participant) => participant.workspace)
   participants: WorkspaceParticipant[];

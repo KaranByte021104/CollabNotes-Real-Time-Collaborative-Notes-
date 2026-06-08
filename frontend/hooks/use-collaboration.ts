@@ -20,34 +20,37 @@ export interface ActivityLog {
   metadata: {
     name?: string;
     userName?: string;
+    noteTitle?: string;
+    removedUserName?: string;
   };
 }
 
-export function useCollaboration(workspaceId: string) {
+export function useCollaboration(workspaceId: string, noteId: string) {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [isConnected, setIsConnected] = useState<boolean>(false);
-  // useState for ydoc/awareness so setting them triggers a re-render
+  const [isSynced, setIsSynced] = useState<boolean>(false);
+  const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
+  const [reconnectFailed, setReconnectFailed] = useState<boolean>(false);
+  const [syncVersion, setSyncVersion] = useState<number>(0);
+  
   const [ydoc, setYdoc] = useState<Y.Doc | null>(null);
   const [awareness, setAwareness] = useState<awarenessProtocol.Awareness | null>(null);
 
-  // References to keep stable access across effects without triggering re-renders
   const socketRef = useRef<Socket | null>(null);
   const snapshotCallbackRef = useRef<(() => string) | null>(null);
   const lastNoteUpdateUserMap = useRef<Map<string, number>>(new Map());
-  // Gate: only emit doc_update / awareness_update AFTER the workspace join handshake
-  // completes (after workspace_meta is received). Without this, Yjs fires updates on
-  // editor init BEFORE join_workspace, causing "Forbidden: not active in workspace room".
   const isJoinedRef = useRef<boolean>(false);
 
   useEffect(() => {
+    if (!workspaceId || !noteId) return;
+
     // 1. Create a new Yjs Document
     const ydoc = new Y.Doc();
 
     // 2. Initialize Awareness
     const awareness = new awarenessProtocol.Awareness(ydoc);
 
-    // Expose to React so the workspace page can render the editor
     setYdoc(ydoc);
     setAwareness(awareness);
 
@@ -55,52 +58,116 @@ export function useCollaboration(workspaceId: string) {
     const token = localStorage.getItem('collab_notes_token');
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
 
-    // 3. Connect Socket.IO Client
+    // 3. Connect Socket.IO Client with robust reconnection options
     const socket = io(socketUrl, {
       auth: { token },
-      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
     });
     socketRef.current = socket;
 
     // On socket connection success
     socket.on('connect', () => {
       setIsConnected(true);
-      isJoinedRef.current = false; // reset on each (re)connect
-      console.log('Socket.IO connected. Joining workspace:', workspaceId);
-      socket.emit('join_workspace', { workspaceId });
+      isJoinedRef.current = false;
+      setIsSynced(false);
+      setIsReconnecting(false);
+      setReconnectFailed(false);
+      console.log(`Socket.IO connected. Joining workspace: ${workspaceId}, note: ${noteId}`);
+      socket.emit('join_workspace', { workspaceId, noteId });
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
       setIsConnected(false);
-      isJoinedRef.current = false; // reset so reconnect re-runs handshake
-      console.log('Socket.IO disconnected.');
+      isJoinedRef.current = false;
+      setIsSynced(false);
+      console.log('Socket.IO disconnected. Reason:', reason);
+      if (reason === 'io server disconnect' || reason === 'io client disconnect') {
+        setIsReconnecting(false);
+      } else {
+        setIsReconnecting(true);
+      }
+    });
+
+    socket.on('reconnect_attempt', (attempt) => {
+      console.log(`Socket.IO: Reconnection attempt ${attempt}/5`);
+      setIsReconnecting(true);
+      setReconnectFailed(false);
+    });
+
+    socket.on('reconnect_failed', () => {
+      console.log('Socket.IO: Reconnection attempts failed completely');
+      setReconnectFailed(true);
+      setIsReconnecting(false);
+    });
+
+    socket.on('reconnect', () => {
+      console.log('Socket.IO: Reconnected successfully');
+      setReconnectFailed(false);
+      setIsReconnecting(false);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('Socket.IO connect_error:', error);
+      const msg = error.message?.toLowerCase() || '';
+      if (
+        msg.includes('unauthorized') ||
+        msg.includes('jwt') ||
+        msg.includes('token') ||
+        msg.includes('expired') ||
+        msg.includes('forbidden') ||
+        error.message === 'Forbidden'
+      ) {
+        toast.error("Your session has expired. Please sign in again.");
+        setTimeout(() => {
+          localStorage.removeItem('collab_notes_token');
+          localStorage.removeItem('user');
+          window.location.href = '/login';
+        }, 2000);
+      }
     });
 
     // 4. Implement Yjs Sync Handshake
-    socket.on('sync_step1', (data: { stateVector: number[] }) => {
+    socket.on('sync_step1', (data: { noteId: string; stateVector: number[] }) => {
+      if (data.noteId !== noteId) return;
+      console.log('Client: Received sync_step1 from server');
       const { stateVector } = data;
-      // Compute updates that the client has but the server is missing
       const clientUpdate = Y.encodeStateAsUpdate(ydoc, new Uint8Array(stateVector));
       const clientStateVector = Y.encodeStateVector(ydoc);
 
-      // Send missing client updates and client's own state vector back to server
+      console.log('Client: Emitting sync_step2 to server');
       socket.emit('sync_step2', {
         workspaceId,
+        noteId,
         update: Array.from(clientUpdate),
         clientStateVector: Array.from(clientStateVector),
       });
     });
 
-    socket.on('sync_complete', (data: { update: number[] }) => {
+    socket.on('sync_complete', (data: { noteId: string; update: number[] }) => {
+      if (data.noteId !== noteId) return;
+      console.log('Client: Received sync_complete from server');
       const { update } = data;
-      // Apply server's missing updates to local ydoc
-      Y.applyUpdate(ydoc, new Uint8Array(update), 'remote');
+      try {
+        Y.applyUpdate(ydoc, new Uint8Array(update), 'remote');
+      } catch (e) {
+        console.warn('Client: Yjs sync_complete failed (potential corruption). Recreating Y.Doc...', e);
+        setSyncVersion(prev => prev + 1);
+      }
     });
 
-    // Listen to real-time doc updates from other clients
-    socket.on('doc_update', (data: { update: number[]; updatedBy?: { userId: string; name: string } }) => {
+    socket.on('doc_update', (data: { noteId: string; update: number[]; updatedBy?: { userId: string; name: string } }) => {
+      if (data.noteId !== noteId) return;
       const { update, updatedBy } = data;
-      Y.applyUpdate(ydoc, new Uint8Array(update), 'remote');
+      try {
+        Y.applyUpdate(ydoc, new Uint8Array(update), 'remote');
+      } catch (e) {
+        console.warn('Client: Yjs doc_update failed (potential corruption). Recreating Y.Doc...', e);
+        setSyncVersion(prev => prev + 1);
+        return;
+      }
 
       if (updatedBy) {
         const now = Date.now();
@@ -119,7 +186,8 @@ export function useCollaboration(workspaceId: string) {
     });
 
     // Listen to ephemeral awareness updates (cursors/selections)
-    socket.on('awareness_update', (data: { update: number[] }) => {
+    socket.on('awareness_update', (data: { noteId: string; update: number[] }) => {
+      if (data.noteId !== noteId) return;
       const { update } = data;
       awarenessProtocol.applyAwarenessUpdate(awareness, new Uint8Array(update), 'remote');
     });
@@ -128,11 +196,11 @@ export function useCollaboration(workspaceId: string) {
     ydoc.on('update', (update, origin) => {
       if (origin !== 'remote') {
         if (!isJoinedRef.current) {
-          // Too early — handshake not finished yet. Drop silently.
           return;
         }
         socket.emit('doc_update', {
           workspaceId,
+          noteId,
           update: Array.from(update),
         });
 
@@ -169,15 +237,15 @@ export function useCollaboration(workspaceId: string) {
       const update = awarenessProtocol.encodeAwarenessUpdate(awareness, [ydoc.clientID]);
       socket.emit('awareness_update', {
         workspaceId,
+        noteId,
         update: Array.from(update),
       });
     };
 
-    // When the local client's cursor/state updates, broadcast to other users
     awareness.on('update', handleLocalAwareness);
 
     // Set local user details on the awareness instance
-    const storedUser = localStorage.getItem('user'); // we can fetch from localStorage if stored, or decode token
+    const storedUser = localStorage.getItem('user');
     let userDetails = { name: 'Anonymous User' };
     if (storedUser) {
       try {
@@ -192,8 +260,9 @@ export function useCollaboration(workspaceId: string) {
 
     // 5. Non-Yjs Socket Events
     socket.on('workspace_meta', (data: { onlineUsers: OnlineUser[]; activityLogs: ActivityLog[] }) => {
-      // Handshake complete — it is now safe to broadcast local doc/awareness updates
+      console.log('Client: Received workspace_meta from server');
       isJoinedRef.current = true;
+      setIsSynced(true);
       setOnlineUsers(data.onlineUsers);
       setActivityLogs(data.activityLogs);
     });
@@ -212,9 +281,22 @@ export function useCollaboration(workspaceId: string) {
       setActivityLogs((prevLogs) => [newLog, ...prevLogs.slice(0, 49)]);
     });
 
-    // Handle Errors
     socket.on('error', (err: { message: string }) => {
-      toast.error(`Socket Error: ${err.message}`);
+      console.error('Socket error received:', err);
+      const msg = err.message || '';
+      if (
+        msg.toLowerCase().includes('forbidden') ||
+        msg.toLowerCase().includes('workspace') ||
+        msg.toLowerCase().includes('active') ||
+        msg.toLowerCase().includes('participant')
+      ) {
+        toast.error("You don't have access to that workspace");
+        setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 1500);
+      } else {
+        toast.error(`Socket Error: ${err.message}`);
+      }
     });
 
     // 6. Setup periodic 5s content snapshot pushes
@@ -224,6 +306,7 @@ export function useCollaboration(workspaceId: string) {
           const content = snapshotCallbackRef.current();
           socket.emit('content_snapshot', {
             workspaceId,
+            noteId,
             content,
           });
         } catch (e) {
@@ -238,6 +321,10 @@ export function useCollaboration(workspaceId: string) {
       
       socket.off('connect');
       socket.off('disconnect');
+      socket.off('reconnect_attempt');
+      socket.off('reconnect_failed');
+      socket.off('reconnect');
+      socket.off('connect_error');
       socket.off('sync_step1');
       socket.off('sync_complete');
       socket.off('doc_update');
@@ -252,7 +339,7 @@ export function useCollaboration(workspaceId: string) {
       awareness.destroy();
       ydoc.destroy();
     };
-  }, [workspaceId]);
+  }, [workspaceId, noteId, syncVersion]);
 
   const setSnapshotCallback = useCallback((fn: () => string) => {
     snapshotCallbackRef.current = fn;
@@ -264,6 +351,10 @@ export function useCollaboration(workspaceId: string) {
     onlineUsers,
     activityLogs,
     isConnected,
+    isSynced,
+    isReconnecting,
+    reconnectFailed,
     setSnapshotCallback,
+    socket: socketRef.current, // Expose raw socket reference for manual listeners
   };
 }

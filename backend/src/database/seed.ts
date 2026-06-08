@@ -63,14 +63,24 @@ async function run() {
     testWorkspace = await workspaceRepository.save(testWorkspace);
     console.log('Test workspace created.');
 
-    // 3. Create Note for workspace
-    console.log('Creating associated note...');
-    const testNote = new Note();
-    testNote.content = '{"type":"doc","content":[{"type":"paragraph"}]}';
-    testNote.ydocState = null;
-    testNote.workspace = testWorkspace;
-    await noteRepository.save(testNote);
-    console.log('Associated note created.');
+    // 3. Create Notes for workspace
+    console.log('Creating associated notes...');
+    const welcomeNote = new Note();
+    welcomeNote.title = 'Welcome Note';
+    welcomeNote.order = 0;
+    welcomeNote.content = '{"type":"doc","content":[{"type":"paragraph"}]}';
+    welcomeNote.ydocState = null;
+    welcomeNote.workspace = testWorkspace;
+    await noteRepository.save(welcomeNote);
+
+    const meetingNote = new Note();
+    meetingNote.title = 'Meeting Notes';
+    meetingNote.order = 1;
+    meetingNote.content = '{"type":"doc","content":[{"type":"paragraph"}]}';
+    meetingNote.ydocState = null;
+    meetingNote.workspace = testWorkspace;
+    await noteRepository.save(meetingNote);
+    console.log('Associated notes created.');
 
     // 4. Create Workspace Participant link
     console.log('Adding test user as participant...');

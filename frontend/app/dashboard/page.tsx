@@ -6,13 +6,19 @@ import { toast } from 'sonner';
 import { 
   FolderPlus, 
   LogIn, 
+  LogOut,
   Clipboard, 
   Check, 
   ArrowRight, 
   FileText, 
   Search, 
   Sparkles, 
-  Loader2 
+  Loader2,
+  Trash2,
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  Archive
 } from 'lucide-react';
 
 import { useAuth } from '@/context/auth-context';
@@ -23,7 +29,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import api from '@/lib/axios';
 
 interface WorkspaceItem {
@@ -31,6 +37,7 @@ interface WorkspaceItem {
   name: string;
   code: string;
   joinedAt: string;
+  isCreator?: boolean;
 }
 
 export default function Dashboard() {
@@ -39,12 +46,16 @@ export default function Dashboard() {
 
   // State
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
+  const [archivedWorkspaces, setArchivedWorkspaces] = useState<WorkspaceItem[]>([]);
+  const [archivedExpanded, setArchivedExpanded] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Dialog open triggers
   const [createOpen, setCreateOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
 
   // Form State - Create
   const [createName, setCreateName] = useState('');
@@ -55,6 +66,15 @@ export default function Dashboard() {
   const [joinCode, setJoinCode] = useState('');
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+
+  // Deletion State
+  const [selectedWorkspaceForDelete, setSelectedWorkspaceForDelete] = useState<WorkspaceItem | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Leave State
+  const [selectedWorkspaceForLeave, setSelectedWorkspaceForLeave] = useState<WorkspaceItem | null>(null);
+  const [isLeaving, setIsLeaving] = useState(false);
 
   // Clipboard Copied indicators
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -70,11 +90,24 @@ export default function Dashboard() {
     try {
       const response = await api.get('/workspaces');
       setWorkspaces(response.data);
+      const archivedResponse = await api.get('/workspaces?archived=true');
+      setArchivedWorkspaces(archivedResponse.data);
     } catch (err: any) {
       console.error('Failed to load workspaces:', err);
       setFetchError('Failed to load workspaces. Please refresh and try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleUnarchiveWorkspace = async (workspaceId: string) => {
+    try {
+      await api.patch(`/workspaces/${workspaceId}/unarchive`);
+      toast.success('Workspace unarchived!');
+      fetchWorkspaces();
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to unarchive workspace');
     }
   };
 
@@ -101,7 +134,10 @@ export default function Dashboard() {
 
   const handleJoinWorkspace = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!joinCode.trim()) return;
+    if (!joinCode.trim()) {
+      setJoinError('Workspace code is required');
+      return;
+    }
 
     setJoinLoading(true);
     setJoinError(null);
@@ -118,6 +154,64 @@ export default function Dashboard() {
       setJoinLoading(false);
     }
   };
+
+  const openDeleteConfirm = (ws: WorkspaceItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedWorkspaceForDelete(ws);
+    setDeleteConfirmName('');
+    setDeleteOpen(true);
+  };
+
+  const handleDeleteWorkspace = async () => {
+    if (!selectedWorkspaceForDelete) return;
+    if (deleteConfirmName !== selectedWorkspaceForDelete.name) {
+      toast.error('Workspace name does not match.');
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await api.delete(`/workspaces/${selectedWorkspaceForDelete.id}`);
+      toast.success('Workspace deleted successfully');
+      setDeleteOpen(false);
+      setWorkspaces(prev => prev.filter(w => w.id !== selectedWorkspaceForDelete.id));
+      setSelectedWorkspaceForDelete(null);
+    } catch (err: any) {
+      console.error('Failed to delete workspace:', err);
+      toast.error(err.response?.data?.message || 'Failed to delete workspace.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const openLeaveConfirm = (ws: WorkspaceItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedWorkspaceForLeave(ws);
+    setLeaveOpen(true);
+  };
+
+  const handleLeaveWorkspace = async () => {
+    if (!selectedWorkspaceForLeave) return;
+    setIsLeaving(true);
+    try {
+      await api.post(`/workspaces/${selectedWorkspaceForLeave.id}/leave`);
+      toast.success('Left workspace successfully');
+      setLeaveOpen(false);
+      setWorkspaces(prev => prev.filter(w => w.id !== selectedWorkspaceForLeave.id));
+      setSelectedWorkspaceForLeave(null);
+    } catch (err: any) {
+      console.error('Failed to leave workspace:', err);
+      toast.error(err.response?.data?.message || 'Failed to leave workspace.');
+    } finally {
+      setIsLeaving(false);
+    }
+  };
+
+  // Clear join errors when dialog is toggled
+  useEffect(() => {
+    if (!joinOpen) {
+      setJoinError(null);
+    }
+  }, [joinOpen]);
 
   const copyToClipboard = (id: string, code: string) => {
     navigator.clipboard.writeText(code);
@@ -225,7 +319,7 @@ export default function Dashboard() {
           </div>
 
           {fetchError && (
-            <div className="text-center py-10 bg-red-50 dark:bg-red-950/10 border border-red-200 dark:border-red-900/30 rounded-2xl text-red-600 dark:text-red-400 text-sm font-medium">
+            <div className="text-center py-10 bg-red-55 dark:bg-red-950/10 border border-red-200 dark:border-red-900/30 rounded-2xl text-red-600 dark:text-red-400 text-sm font-medium">
               {fetchError}
             </div>
           )}
@@ -308,10 +402,31 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <div className="w-full md:w-auto flex justify-end">
+                  <div className="w-full md:w-auto flex items-center justify-end gap-2">
+                    {ws.isCreator ? (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => openDeleteConfirm(ws, e)}
+                        className="border border-red-200 dark:border-red-900/50 text-red-500 hover:text-red-650 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 size-9 flex items-center justify-center cursor-pointer"
+                        title="Delete Workspace"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => openLeaveConfirm(ws, e)}
+                        className="border border-amber-200 dark:border-amber-900/50 text-amber-500 hover:text-amber-650 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 size-9 flex items-center justify-center cursor-pointer"
+                        title="Leave Workspace"
+                      >
+                        <LogOut className="size-4" />
+                      </Button>
+                    )}
                     <Button 
                       onClick={() => router.push(`/workspace/${ws.id}`)}
-                      className="w-full md:w-auto bg-slate-900 dark:bg-slate-800 hover:bg-slate-850 dark:hover:bg-slate-700 text-white font-semibold flex items-center justify-center gap-2 group shadow-sm"
+                      className="w-full md:w-auto bg-slate-900 dark:bg-slate-800 hover:bg-slate-850 dark:hover:bg-slate-700 text-white font-semibold flex items-center justify-center gap-2 group shadow-sm cursor-pointer"
                     >
                       <span>Enter Workspace</span>
                       <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
@@ -322,6 +437,65 @@ export default function Dashboard() {
             </div>
           )}
 
+        </div>
+
+        {/* Collapsible Archived Workspaces Section */}
+        <div className="space-y-4 pt-6 border-t border-slate-200/60 dark:border-slate-800/60">
+          <div className="flex items-center justify-between">
+            <button 
+              onClick={() => setArchivedExpanded(!archivedExpanded)}
+              className="flex items-center gap-2 text-xl font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer focus:outline-none"
+            >
+              {archivedExpanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
+              <span>Archived Workspaces</span>
+              <Badge variant="secondary" className="bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold px-2 py-0.5 rounded-full ml-1">
+                {archivedWorkspaces.length}
+              </Badge>
+            </button>
+          </div>
+
+          {archivedExpanded && (
+            <div className="space-y-4 pt-2">
+              {archivedWorkspaces.map((ws) => (
+                <div 
+                  key={ws.id} 
+                  className="flex flex-col md:flex-row items-start md:items-center justify-between p-6 bg-slate-150/15 dark:bg-slate-900/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800/80 gap-4 opacity-75 hover:opacity-100 transition-opacity"
+                >
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <h3 className="text-lg font-bold text-slate-655 dark:text-slate-400 line-through truncate">
+                      {ws.name}
+                    </h3>
+                    <p className="text-xs text-slate-400 dark:text-slate-500">
+                      Archived workspace
+                    </p>
+                  </div>
+
+                  <div className="w-full md:w-auto flex items-center justify-end gap-2">
+                    {ws.isCreator && (
+                      <Button
+                        onClick={() => handleUnarchiveWorkspace(ws.id)}
+                        variant="outline"
+                        size="sm"
+                        className="font-semibold border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 h-9 px-3 cursor-pointer"
+                      >
+                        Unarchive
+                      </Button>
+                    )}
+                    <Button 
+                      onClick={() => router.push(`/workspace/${ws.id}`)}
+                      size="sm"
+                      className="font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 h-9 px-4 cursor-pointer"
+                    >
+                      View Notes
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {archivedWorkspaces.length === 0 && (
+                <p className="text-sm text-slate-455 dark:text-slate-500 italic pl-1">No archived workspaces.</p>
+              )}
+            </div>
+          )}
         </div>
 
       </main>
@@ -346,12 +520,12 @@ export default function Dashboard() {
                 value={createName}
                 maxLength={60}
                 onChange={(e) => setCreateName(e.target.value)}
-                className="border-slate-200 dark:border-slate-800 focus-visible:ring-indigo-500"
+                className="border-slate-200 dark:border-slate-800 focus-visible:ring-indigo-500 text-sm"
                 required
               />
-              <div className="flex justify-between items-center text-xs text-slate-400">
+              <div className="flex justify-between items-center text-xs text-slate-450">
                 <span>{createName.length} / 60 characters</span>
-                {createName.length >= 60 && <span className="text-red-500 font-medium">Limit reached</span>}
+                {createName.length >= 60 && <span className="text-red-550 font-medium">Limit reached</span>}
               </div>
             </div>
 
@@ -366,14 +540,14 @@ export default function Dashboard() {
                 type="button" 
                 variant="ghost" 
                 onClick={() => setCreateOpen(false)}
-                className="border border-transparent hover:bg-slate-100 dark:hover:bg-slate-850"
+                className="border border-transparent hover:bg-slate-100 dark:hover:bg-slate-850 cursor-pointer"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 disabled={createLoading || !createName.trim()}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold cursor-pointer"
               >
                 {createLoading ? (
                   <>
@@ -407,31 +581,34 @@ export default function Dashboard() {
                 type="text"
                 placeholder="e.g. ocean-lamp-74"
                 value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toLowerCase())}
-                className="border-slate-200 dark:border-slate-800 focus-visible:ring-indigo-500 font-mono"
-                required
+                onChange={(e) => {
+                  setJoinCode(e.target.value.toLowerCase());
+                  if (joinError) setJoinError(null);
+                }}
+                className={`border-slate-200 dark:border-slate-800 focus-visible:ring-indigo-500 font-mono text-sm ${
+                  joinError ? 'border-red-500 focus-visible:ring-red-500' : ''
+                }`}
               />
+              {joinError && (
+                <p className="text-xs font-semibold text-red-500 mt-1 animate-in fade-in duration-200">
+                  {joinError}
+                </p>
+              )}
             </div>
-
-            {joinError && (
-              <p className="text-sm font-semibold text-red-500 bg-red-50 dark:bg-red-950/20 p-2.5 rounded-lg border border-red-200 dark:border-red-900/30">
-                {joinError}
-              </p>
-            )}
 
             <div className="flex gap-3 justify-end pt-2">
               <Button 
                 type="button" 
                 variant="ghost" 
                 onClick={() => setJoinOpen(false)}
-                className="border border-transparent hover:bg-slate-100 dark:hover:bg-slate-850"
+                className="border border-transparent hover:bg-slate-100 dark:hover:bg-slate-850 cursor-pointer"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                disabled={joinLoading || !joinCode.trim()}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+                disabled={joinLoading}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold cursor-pointer"
               >
                 {joinLoading ? (
                   <>
@@ -446,6 +623,75 @@ export default function Dashboard() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Workspace Dialog */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="max-w-md border-slate-200 dark:border-slate-800/80 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <AlertTriangle className="size-5 text-red-500" />
+              Delete Workspace
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 dark:text-slate-400 mt-2">
+              Are you absolutely sure you want to delete <span className="font-bold text-slate-850 dark:text-slate-200">&apos;{selectedWorkspaceForDelete?.name}&apos;</span>? 
+              This will permanently delete the workspace, all its notes, and revoke access for all members. This action is irreversible.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2.5 my-3">
+            <label className="text-xs font-bold text-slate-550 dark:text-slate-400">
+              Type <span className="font-extrabold text-slate-900 dark:text-white select-none">{selectedWorkspaceForDelete?.name}</span> to confirm deletion:
+            </label>
+            <Input
+              type="text"
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+              placeholder="Enter workspace name"
+              className="bg-transparent text-sm w-full font-medium"
+            />
+          </div>
+
+          <DialogFooter className="mt-4 gap-2">
+            <DialogClose render={<Button variant="outline" className="border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 font-semibold cursor-pointer">Cancel</Button>} />
+            <Button
+              variant="destructive"
+              disabled={deleteConfirmName !== selectedWorkspaceForDelete?.name || isDeleting}
+              onClick={handleDeleteWorkspace}
+              className="bg-red-600 hover:bg-red-750 text-white font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete Permanently'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Leave Workspace Dialog */}
+      <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
+        <DialogContent className="max-w-sm border-slate-200 dark:border-slate-800/80 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <AlertTriangle className="size-5 text-amber-500" />
+              Leave Workspace
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 dark:text-slate-400 mt-2">
+              Are you sure you want to leave <span className="font-bold text-slate-850 dark:text-slate-200">&apos;{selectedWorkspaceForLeave?.name}&apos;</span>? 
+              You will no longer have access to this workspace and its notes unless you join again using the workspace code.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="mt-4 gap-2">
+            <DialogClose render={<Button variant="outline" className="border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 font-semibold cursor-pointer">Cancel</Button>} />
+            <Button
+              disabled={isLeaving}
+              onClick={handleLeaveWorkspace}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer disabled:opacity-50"
+            >
+              {isLeaving ? 'Leaving...' : 'Leave Workspace'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
     </div>
   );

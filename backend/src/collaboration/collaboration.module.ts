@@ -16,6 +16,6 @@ import { AuthModule } from '../auth/auth.module';
     AuthModule,
   ],
   providers: [CollaborationGateway, YdocStoreService, OnlineUsersStore],
-  exports: [YdocStoreService, OnlineUsersStore],
+  exports: [CollaborationGateway, YdocStoreService, OnlineUsersStore],
 })
 export class CollaborationModule {}

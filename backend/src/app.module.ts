@@ -12,6 +12,11 @@ import { AuthModule } from './auth/auth.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { CollaborationModule } from './collaboration/collaboration.module';
 
+import { Tag } from './entities/tag.entity';
+import { Notification } from './entities/notification.entity';
+import { PasswordResetOtp } from './entities/password-reset-otp.entity';
+import { NotificationsModule } from './notifications/notifications.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -38,10 +43,14 @@ import { CollaborationModule } from './collaboration/collaboration.module';
       Note,
       ActivityLog,
       WorkspaceParticipant,
+      Tag,
+      Notification,
+      PasswordResetOtp,
     ]),
     AuthModule,
     WorkspacesModule,
     CollaborationModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -47,7 +47,12 @@ export default function RegisterPage() {
       await registerUser(data.name, data.email, data.password);
     } catch (err: any) {
       console.error('Registration failed:', err);
-      const message = err.response?.data?.message || 'Registration failed. Please try again.';
+      let message = 'Registration failed. Please try again.';
+      if (err.message === 'Network Error' || err.code === 'ERR_NETWORK' || !err.response) {
+        message = 'Could not connect to the server. Please ensure the backend is running and try again.';
+      } else if (err.response?.data?.message) {
+        message = err.response.data.message;
+      }
       setErrorMsg(Array.isArray(message) ? message[0] : message);
     } finally {
       setIsSubmitting(false);

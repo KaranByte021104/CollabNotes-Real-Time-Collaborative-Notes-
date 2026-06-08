@@ -82,19 +82,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const response = await api.post('/auth/login', { email, password });
     const { access_token, user: loggedInUser } = response.data;
     handleSetAuth(access_token, loggedInUser);
-    router.push('/dashboard');
+    window.location.replace('/dashboard');
   };
 
   const register = async (name: string, email: string, password: string) => {
     const response = await api.post('/auth/register', { name, email, password });
     const { access_token, user: loggedInUser } = response.data;
     handleSetAuth(access_token, loggedInUser);
-    router.push('/dashboard');
+    window.location.replace('/dashboard');
   };
 
   const logout = () => {
     handleClearAuth();
-    router.push('/login');
+    window.location.replace('/login');
   };
 
   return (

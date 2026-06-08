@@ -31,9 +31,9 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
   @WebSocketServer()
   server: Server;
 
-  // Debounce map for DB saves: workspaceId -> Timeout
+  // Debounce map for DB saves: noteId -> Timeout
   private readonly saveDebounceMap = new Map<string, NodeJS.Timeout>();
-  // Store latest content snapshots sent from clients: workspaceId -> content JSON string
+  // Store latest content snapshots sent from clients: noteId -> content JSON string
   private readonly latestSnapshots = new Map<string, string>();
 
   constructor(
@@ -75,6 +75,8 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
         name: user.name,
         email: user.email,
       };
+
+      await client.join('user:' + user.id);
       
       console.log(`Socket connected: ${client.id} (User: ${user.name})`);
     } catch (err) {
@@ -84,7 +86,7 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     }
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     console.log(`Socket disconnected: ${client.id}`);
     const session = this.onlineUsersStore.findUserBySocketId(client.id);
 
@@ -95,18 +97,16 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
       this.onlineUsersStore.removeUser(workspaceId, user.userId);
 
       // Broadcast user left
+      // Broadcast user left
       const remainingUsers = this.onlineUsersStore.getUsers(workspaceId);
       this.server.to(workspaceId).emit('user_left', {
         user,
         onlineUsers: remainingUsers,
       });
 
-      // Save USER_LEFT activity log asynchronously
-      this.saveActivityLog(workspaceId, user.userId, ActivityEventType.USER_LEFT, { name: user.name });
-
-      // If no users left in workspace, flush save immediately
+      // If no users left in workspace, flush all workspace note saves immediately and clear memory
       if (remainingUsers.length === 0) {
-        this.flushDatabaseSave(workspaceId);
+        await this.flushAllWorkspaceNotes(workspaceId);
       }
     }
   }
@@ -114,12 +114,17 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
   @SubscribeMessage('join_workspace')
   async handleJoinWorkspace(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { workspaceId: string },
+    @MessageBody() data: { workspaceId: string; noteId?: string },
   ) {
-    const { workspaceId } = data;
+    const { workspaceId, noteId } = data;
     const user = client.data.user;
 
-    if (!user) return;
+    if (!user) {
+      console.log('Gateway: join_workspace rejected - no user on client socket');
+      return;
+    }
+
+    console.log(`Gateway: join_workspace received for workspace: ${workspaceId}, note: ${noteId} from user: ${user.name} (${user.userId})`);
 
     // 1. Verify user is a participant of this workspace
     const isParticipant = await this.participantRepository.findOne({
@@ -127,9 +132,12 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     });
 
     if (!isParticipant) {
+      console.warn(`Gateway: join_workspace FORBIDDEN - user ${user.name} is not a participant of workspace ${workspaceId}`);
       client.emit('error', { message: 'Forbidden: You are not a participant of this workspace' });
       return;
     }
+
+    console.log(`Gateway: user ${user.name} is verified participant. Joining socket room...`);
 
     // 2. Join the Socket.IO room
     client.join(workspaceId);
@@ -137,23 +145,39 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     // 3. Add to OnlineUsersStore
     const onlineUser = this.onlineUsersStore.addUser(workspaceId, user.userId, user.name, client.id);
 
-    // 4. Load Note to initialize server in-memory Yjs doc
-    const note = await this.noteRepository.findOne({ where: { workspace: { id: workspaceId } } });
-    if (note) {
-      this.ydocStore.getOrCreate(workspaceId, note.ydocState);
-      if (note.content) {
-        this.latestSnapshots.set(workspaceId, note.content);
+    // 4. Resolve correct active note ID
+    let activeNoteId = noteId;
+    if (!activeNoteId) {
+      // Find fallback note with lowest order
+      const notes = await this.noteRepository.find({
+        where: { workspace: { id: workspaceId } },
+        order: { order: 'ASC' },
+        take: 1,
+      });
+      if (notes.length > 0) {
+        activeNoteId = notes[0].id;
       }
-    } else {
-      this.ydocStore.getOrCreate(workspaceId, null);
+    }
+
+    if (activeNoteId) {
+      const note = await this.noteRepository.findOne({ where: { id: activeNoteId } });
+      if (note) {
+        this.ydocStore.getOrCreate(activeNoteId, note.ydocState, note.content);
+        if (note.content) {
+          this.latestSnapshots.set(activeNoteId, note.content);
+        }
+      }
     }
 
     // 5. Yjs Sync Step 1: Send server state vector to client
-    const stateVector = this.ydocStore.getStateVector(workspaceId);
-    client.emit('sync_step1', {
-      workspaceId,
-      stateVector: Array.from(stateVector),
-    });
+    if (activeNoteId) {
+      const stateVector = this.ydocStore.getStateVector(activeNoteId);
+      client.emit('sync_step1', {
+        workspaceId,
+        noteId: activeNoteId,
+        stateVector: Array.from(stateVector),
+      });
+    }
 
     // 6. Broadcast user_joined to everyone else in the room
     const onlineUsers = this.onlineUsersStore.getUsers(workspaceId);
@@ -161,36 +185,37 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
       user: onlineUser,
       onlineUsers,
     });
-
-    // 7. Log USER_JOINED to DB
-    this.saveActivityLog(workspaceId, user.userId, ActivityEventType.USER_JOINED, { name: user.name });
   }
 
   @SubscribeMessage('sync_step2')
   async handleSyncStep2(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { workspaceId: string; update: number[]; clientStateVector: number[] },
+    @MessageBody() data: { workspaceId: string; noteId: string; update: number[]; clientStateVector: number[] },
   ) {
-    const { workspaceId, update, clientStateVector } = data;
+    const { workspaceId, noteId, update, clientStateVector } = data;
     const user = client.data.user;
     if (!user) return;
+
+    console.log(`Gateway: sync_step2 received from user ${user.name} for noteId ${noteId}`);
 
     const updateBuffer = new Uint8Array(update);
 
     // 1. Apply client updates to server Y.Doc
-    this.ydocStore.applyUpdate(workspaceId, updateBuffer);
+    this.ydocStore.applyUpdate(noteId, updateBuffer);
 
     // 2. Broadcast doc_update to others in the room
     client.to(workspaceId).emit('doc_update', {
       workspaceId,
+      noteId,
       update: Array.from(updateBuffer),
       updatedBy: { userId: user.userId, name: user.name },
     });
 
     // 3. Send server's missing updates back to client (sync_complete)
-    const serverUpdate = this.ydocStore.getUpdate(workspaceId, new Uint8Array(clientStateVector));
+    const serverUpdate = this.ydocStore.getUpdate(noteId, new Uint8Array(clientStateVector));
     client.emit('sync_complete', {
       workspaceId,
+      noteId,
       update: Array.from(serverUpdate),
     });
 
@@ -216,15 +241,15 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     });
 
     // 5. Debounce save
-    this.scheduleDatabaseSave(workspaceId, user.userId, user.name);
+    this.scheduleDatabaseSave(noteId, user.userId, user.name, workspaceId);
   }
 
   @SubscribeMessage('doc_update')
   handleDocUpdate(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { workspaceId: string; update: number[] },
+    @MessageBody() data: { workspaceId: string; noteId: string; update: number[] },
   ) {
-    const { workspaceId, update } = data;
+    const { workspaceId, noteId, update } = data;
     const user = client.data.user;
     if (!user) return;
 
@@ -238,29 +263,31 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     const updateBuffer = new Uint8Array(update);
 
     // Apply to Y.Doc
-    this.ydocStore.applyUpdate(workspaceId, updateBuffer);
+    this.ydocStore.applyUpdate(noteId, updateBuffer);
 
     // Broadcast to others
     client.to(workspaceId).emit('doc_update', {
       workspaceId,
+      noteId,
       update: Array.from(updateBuffer),
       updatedBy: { userId: user.userId, name: user.name },
     });
 
     // Debounce save
-    this.scheduleDatabaseSave(workspaceId, user.userId, user.name);
+    this.scheduleDatabaseSave(noteId, user.userId, user.name, workspaceId);
   }
 
   @SubscribeMessage('awareness_update')
   handleAwarenessUpdate(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { workspaceId: string; update: number[] },
+    @MessageBody() data: { workspaceId: string; noteId: string; update: number[] },
   ) {
-    const { workspaceId, update } = data;
+    const { workspaceId, noteId, update } = data;
     
     // Broadcast cursor/selection updates instantly to all other workspace users
     client.to(workspaceId).emit('awareness_update', {
       workspaceId,
+      noteId,
       update,
     });
   }
@@ -268,34 +295,44 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
   @SubscribeMessage('content_snapshot')
   handleContentSnapshot(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { workspaceId: string; content: string },
+    @MessageBody() data: { workspaceId: string; noteId: string; content: string },
   ) {
-    const { workspaceId, content } = data;
-    this.latestSnapshots.set(workspaceId, content);
+    const { noteId, content } = data;
+    this.latestSnapshots.set(noteId, content);
   }
 
-  private scheduleDatabaseSave(workspaceId: string, userId: string, userName: string) {
-    const existingTimeout = this.saveDebounceMap.get(workspaceId);
+  // --- Public Broadcast Endpoint for Services ---
+
+  broadcastToRoom(roomId: string, event: string, payload: any) {
+    if (this.server) {
+      this.server.to(roomId).emit(event, payload);
+    }
+  }
+
+  // --- Database Save Operations ---
+
+  private scheduleDatabaseSave(noteId: string, userId: string, userName: string, workspaceId: string) {
+    const existingTimeout = this.saveDebounceMap.get(noteId);
     if (existingTimeout) {
       clearTimeout(existingTimeout);
     }
 
     const timeout = setTimeout(() => {
-      this.executeDatabaseSave(workspaceId, userId, userName);
+      this.executeDatabaseSave(noteId, userId, userName, workspaceId);
     }, 2000); // 2 seconds of inactivity
 
-    this.saveDebounceMap.set(workspaceId, timeout);
+    this.saveDebounceMap.set(noteId, timeout);
   }
 
-  private async executeDatabaseSave(workspaceId: string, userId: string, userName: string) {
-    this.saveDebounceMap.delete(workspaceId);
+  private async executeDatabaseSave(noteId: string, userId: string, userName: string, workspaceId: string) {
+    this.saveDebounceMap.delete(noteId);
     try {
-      const fullState = this.ydocStore.encodeFullState(workspaceId);
-      const note = await this.noteRepository.findOne({ where: { workspace: { id: workspaceId } } });
+      const fullState = this.ydocStore.encodeFullState(noteId);
+      const note = await this.noteRepository.findOne({ where: { id: noteId } });
 
       if (note) {
         note.ydocState = Buffer.from(fullState);
-        const snapshot = this.latestSnapshots.get(workspaceId);
+        const snapshot = this.latestSnapshots.get(noteId);
         if (snapshot) {
           note.content = snapshot;
         }
@@ -303,38 +340,58 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
         
         // Log NOTE_UPDATED
         await this.saveActivityLog(workspaceId, userId, ActivityEventType.NOTE_UPDATED, { name: userName });
-        console.log(`Workspace ${workspaceId} note auto-saved successfully.`);
+        console.log(`Note ${noteId} auto-saved successfully.`);
       }
     } catch (error) {
-      console.error(`Failed to auto-save workspace ${workspaceId}:`, error);
+      console.error(`Failed to auto-save note ${noteId}:`, error);
     }
   }
 
-  private async flushDatabaseSave(workspaceId: string) {
-    const timeout = this.saveDebounceMap.get(workspaceId);
+  private async flushDatabaseSave(noteId: string) {
+    const timeout = this.saveDebounceMap.get(noteId);
     if (timeout) {
       clearTimeout(timeout);
-      this.saveDebounceMap.delete(workspaceId);
-
-      // Perform direct save
-      try {
-        const fullState = this.ydocStore.encodeFullState(workspaceId);
-        const note = await this.noteRepository.findOne({ where: { workspace: { id: workspaceId } } });
-        if (note) {
-          note.ydocState = Buffer.from(fullState);
-          const snapshot = this.latestSnapshots.get(workspaceId);
-          if (snapshot) {
-            note.content = snapshot;
-          }
-          await this.noteRepository.save(note);
-          console.log(`Workspace ${workspaceId} note flushed to DB successfully.`);
-        }
-      } catch (error) {
-        console.error(`Failed to flush save for workspace ${workspaceId}:`, error);
-      }
+      this.saveDebounceMap.delete(noteId);
     }
-    this.ydocStore.destroy(workspaceId);
-    this.latestSnapshots.delete(workspaceId);
+
+    // Perform direct save
+    try {
+      const fullState = this.ydocStore.encodeFullState(noteId);
+      const note = await this.noteRepository.findOne({ where: { id: noteId } });
+      if (note) {
+        note.ydocState = Buffer.from(fullState);
+        const snapshot = this.latestSnapshots.get(noteId);
+        if (snapshot) {
+          note.content = snapshot;
+        }
+        await this.noteRepository.save(note);
+        console.log(`Note ${noteId} flushed to DB successfully.`);
+      }
+    } catch (error) {
+      console.error(`Failed to flush save for note ${noteId}:`, error);
+    }
+    
+    this.ydocStore.destroy(noteId);
+    this.latestSnapshots.delete(noteId);
+  }
+
+  private async flushAllWorkspaceNotes(workspaceId: string) {
+    try {
+      const notes = await this.noteRepository.find({
+        where: { workspace: { id: workspaceId } }
+      });
+      for (const note of notes) {
+        if (this.saveDebounceMap.has(note.id)) {
+          await this.flushDatabaseSave(note.id);
+        } else {
+          this.ydocStore.destroy(note.id);
+          this.latestSnapshots.delete(note.id);
+        }
+      }
+      console.log(`Flushed and cleaned all cached notes for workspace ${workspaceId}.`);
+    } catch (error) {
+      console.error(`Failed to flush all notes for workspace ${workspaceId}:`, error);
+    }
   }
 
   private async saveActivityLog(workspaceId: string, userId: string, eventType: ActivityEventType, metadata: any) {

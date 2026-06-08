@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Editor } from '@tiptap/react';
 import { 
   Bold, 
@@ -16,18 +16,72 @@ import {
   Minus, 
   Eraser, 
   Undo2, 
-  Redo2 
+  Redo2,
+  Download,
+  Loader2,
+  Lock,
+  Unlock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { downloadAsPDF, downloadAsMarkdown, downloadAsPlainText, downloadAsDOCX } from '@/lib/download-note';
+import { toast } from 'sonner';
 
 interface EditorToolbarProps {
   editor: Editor | null;
   editable: boolean;
+  noteTitle: string;
+  isCreator?: boolean;
+  isLocked?: boolean;
+  onToggleLock?: () => void;
 }
 
-export function EditorToolbar({ editor, editable }: EditorToolbarProps) {
+export function EditorToolbar({ editor, editable, noteTitle, isCreator, isLocked, onToggleLock }: EditorToolbarProps) {
+  const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false);
+  const [downloadingFormat, setDownloadingFormat] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDownloadDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleDownload = async (format: string) => {
+    if (!editor) return;
+    setDownloadingFormat(format);
+    setDownloadDropdownOpen(false);
+    try {
+      if (format === 'pdf') {
+        const editorEl = document.querySelector('.tiptap') as HTMLElement;
+        if (!editorEl) {
+          throw new Error('Editor canvas element not found.');
+        }
+        await downloadAsPDF(editorEl, noteTitle);
+        toast.success('Note downloaded as PDF');
+      } else if (format === 'markdown') {
+        downloadAsMarkdown(editor.getHTML(), noteTitle);
+        toast.success('Note downloaded as Markdown');
+      } else if (format === 'text') {
+        downloadAsPlainText(editor.getText(), noteTitle);
+        toast.success('Note downloaded as Plain Text');
+      } else if (format === 'docx') {
+        await downloadAsDOCX(editor.getHTML(), noteTitle);
+        toast.success('Note downloaded as Word Document');
+      }
+    } catch (err) {
+      console.error('Failed to download note:', err);
+      toast.error('Download failed. Please try again.');
+    } finally {
+      setDownloadingFormat(null);
+    }
+  };
+
   if (!editor) return null;
 
   const ToolbarButton = ({ 
@@ -214,8 +268,80 @@ export function EditorToolbar({ editor, editable }: EditorToolbarProps) {
         </ToolbarButton>
       </div>
 
-      {/* Group 7: Undo / Redo - Pushed to the right */}
-      <div className="flex items-center gap-0.5 ml-auto">
+      {/* Group 7: Downloads & Undo / Redo - Pushed to the right */}
+      <div className="flex items-center gap-1.5 ml-auto">
+        {/* Lock/Unlock Button (Creator only) */}
+        {isCreator && onToggleLock && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onToggleLock}
+            title={isLocked ? "Unlock note" : "Lock note (read-only for others)"}
+            className={cn(
+              "size-8 rounded-md transition-colors",
+              isLocked 
+                ? "text-red-650 hover:text-red-750 hover:bg-red-50 dark:hover:bg-red-950/20" 
+                : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900"
+            )}
+          >
+            {isLocked ? <Lock className="size-4 text-red-600 dark:text-red-500" /> : <Unlock className="size-4" />}
+          </Button>
+        )}
+
+        {/* Download Dropdown */}
+        <div className="relative" ref={dropdownRef}>
+          <ToolbarButton
+            onClick={() => setDownloadDropdownOpen(!downloadDropdownOpen)}
+            title="Download note"
+          >
+            <Download className="size-4" />
+          </ToolbarButton>
+          
+          {downloadDropdownOpen && (
+            <div className="absolute right-0 mt-1.5 w-48 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg py-1 z-30 animate-in fade-in slide-in-from-top-2 duration-150 text-slate-700 dark:text-slate-200">
+              <button
+                type="button"
+                onClick={() => handleDownload('pdf')}
+                disabled={!!downloadingFormat}
+                className="w-full text-left px-3 py-2 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between cursor-pointer focus:outline-none"
+              >
+                <span>📄 PDF</span>
+                {downloadingFormat === 'pdf' && <Loader2 className="size-3 animate-spin text-slate-450" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownload('markdown')}
+                disabled={!!downloadingFormat}
+                className="w-full text-left px-3 py-2 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between cursor-pointer focus:outline-none"
+              >
+                <span>📝 Markdown (.md)</span>
+                {downloadingFormat === 'markdown' && <Loader2 className="size-3 animate-spin text-slate-450" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownload('text')}
+                disabled={!!downloadingFormat}
+                className="w-full text-left px-3 py-2 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between cursor-pointer focus:outline-none"
+              >
+                <span>📃 Plain Text (.txt)</span>
+                {downloadingFormat === 'text' && <Loader2 className="size-3 animate-spin text-slate-455" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownload('docx')}
+                disabled={!!downloadingFormat}
+                className="w-full text-left px-3 py-2 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between cursor-pointer focus:outline-none"
+              >
+                <span>📘 Word Document (.docx)</span>
+                {downloadingFormat === 'docx' && <Loader2 className="size-3 animate-spin text-slate-455" />}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <Separator orientation="vertical" className="h-6 bg-slate-200 dark:bg-slate-800 mx-0.5" />
+
         <ToolbarButton 
           onClick={() => editor.chain().focus().undo().run()} 
           disabled={!editor.can().chain().focus().undo().run()}

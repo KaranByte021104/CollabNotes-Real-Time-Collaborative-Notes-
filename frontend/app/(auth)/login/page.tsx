@@ -45,7 +45,12 @@ export default function LoginPage() {
       await login(data.email, data.password);
     } catch (err: any) {
       console.error('Login failed:', err);
-      const message = err.response?.data?.message || 'Login failed. Please verify credentials.';
+      let message = 'Login failed. Please verify credentials.';
+      if (err.message === 'Network Error' || err.code === 'ERR_NETWORK' || !err.response) {
+        message = 'Could not connect to the server. Please ensure the backend is running and try again.';
+      } else if (err.response?.data?.message) {
+        message = err.response.data.message;
+      }
       setErrorMsg(Array.isArray(message) ? message[0] : message);
     } finally {
       setIsSubmitting(false);
@@ -93,6 +98,12 @@ export default function LoginPage() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                >
+                  Forgot password?
+                </Link>
               </div>
               <div className="relative">
                 <Input

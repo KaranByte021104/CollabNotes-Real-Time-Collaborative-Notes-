@@ -6,6 +6,17 @@ export enum ActivityEventType {
   USER_JOINED = 'user_joined',
   USER_LEFT = 'user_left',
   NOTE_UPDATED = 'note_updated',
+  NOTE_CREATED = 'note_created',
+  NOTE_DELETED = 'note_deleted',
+  MEMBER_REMOVED = 'member_removed',
+  NOTE_LOCKED = 'note_locked',
+  NOTE_UNLOCKED = 'note_unlocked',
+  NOTE_PINNED = 'note_pinned',
+  NOTE_UNPINNED = 'note_unpinned',
+  TAG_ADDED = 'tag_added',
+  TAG_REMOVED = 'tag_removed',
+  WORKSPACE_ARCHIVED = 'workspace_archived',
+  WORKSPACE_UNARCHIVED = 'workspace_unarchived',
 }
 
 @Entity()

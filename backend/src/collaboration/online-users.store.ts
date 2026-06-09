@@ -5,6 +5,7 @@ export interface OnlineUser {
   name: string;
   socketId: string;
   color: string;
+  avatarUrl?: string;
 }
 
 @Injectable()
@@ -25,7 +26,7 @@ export class OnlineUsersStore {
     return color;
   }
 
-  addUser(workspaceId: string, userId: string, name: string, socketId: string): OnlineUser {
+  addUser(workspaceId: string, userId: string, name: string, socketId: string, avatarUrl?: string): OnlineUser {
     if (!this.store.has(workspaceId)) {
       this.store.set(workspaceId, new Map());
     }
@@ -38,6 +39,7 @@ export class OnlineUsersStore {
       name,
       socketId,
       color,
+      avatarUrl,
     };
 
     workspaceUsers.set(userId, onlineUser);

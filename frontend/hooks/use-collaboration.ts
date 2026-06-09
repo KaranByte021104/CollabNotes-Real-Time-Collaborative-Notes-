@@ -246,7 +246,7 @@ export function useCollaboration(workspaceId: string, noteId: string) {
 
     // Set local user details on the awareness instance
     const storedUser = localStorage.getItem('user');
-    let userDetails = { name: 'Anonymous User' };
+    let userDetails = { name: 'Anonymous User', avatarUrl: null };
     if (storedUser) {
       try {
         userDetails = JSON.parse(storedUser);
@@ -254,8 +254,23 @@ export function useCollaboration(workspaceId: string, noteId: string) {
         console.error('Failed to parse stored user profile:', e);
       }
     }
+    const generateColor = (n: string) => {
+      const colors = [
+        '#EF4444', '#F97316', '#F59E0B', '#10B981',
+        '#059669', '#14B8A6', '#06B6D4', '#0EA5E9',
+        '#3B82F6', '#6366F1', '#8B5CF6', '#A855F7',
+        '#D946EF', '#EC4899', '#F43F5E'
+      ];
+      let hash = 0;
+      for (let i = 0; i < n.length; i++) {
+        hash = n.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      return colors[Math.abs(hash) % colors.length];
+    };
     awareness.setLocalStateField('user', {
       name: userDetails.name,
+      avatarUrl: (userDetails as any).avatarUrl || null,
+      color: generateColor(userDetails.name),
     });
 
     // 5. Non-Yjs Socket Events
@@ -345,6 +360,37 @@ export function useCollaboration(workspaceId: string, noteId: string) {
     snapshotCallbackRef.current = fn;
   }, []);
 
+  const updateAwarenessUser = useCallback((name: string) => {
+    if (awareness) {
+      const storedUser = localStorage.getItem('user');
+      let avatarUrl = null;
+      if (storedUser) {
+        try {
+          avatarUrl = JSON.parse(storedUser).avatarUrl || null;
+        } catch (e) {}
+      }
+      const generateColor = (n: string) => {
+        const colors = [
+          '#EF4444', '#F97316', '#F59E0B', '#10B981',
+          '#059669', '#14B8A6', '#06B6D4', '#0EA5E9',
+          '#3B82F6', '#6366F1', '#8B5CF6', '#A855F7',
+          '#D946EF', '#EC4899', '#F43F5E'
+        ];
+        let hash = 0;
+        for (let i = 0; i < n.length; i++) {
+          hash = n.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        return colors[Math.abs(hash) % colors.length];
+      };
+      
+      awareness.setLocalStateField('user', {
+        name,
+        avatarUrl,
+        color: generateColor(name),
+      });
+    }
+  }, [awareness]);
+
   return {
     ydoc,
     awareness,
@@ -355,6 +401,7 @@ export function useCollaboration(workspaceId: string, noteId: string) {
     isReconnecting,
     reconnectFailed,
     setSnapshotCallback,
+    updateAwarenessUser,
     socket: socketRef.current, // Expose raw socket reference for manual listeners
   };
 }

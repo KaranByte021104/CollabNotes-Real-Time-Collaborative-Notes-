@@ -22,6 +22,7 @@ interface RichTextEditorProps {
   currentUser: {
     name: string;
     color: string;
+    avatarUrl?: string | null;
   };
   editable?: boolean;
   setSnapshotCallback?: (fn: () => string) => void;
@@ -47,7 +48,7 @@ interface RichTextEditorProps {
  */
 function buildCursorExtension(
   awareness: awarenessProtocol.Awareness,
-  user: { name: string; color: string },
+  user: { name: string; color: string; avatarUrl?: string | null },
 ) {
   return Extension.create({
     name: 'collaborationCursor',
@@ -77,6 +78,7 @@ function buildCursorExtension(
       awareness.setLocalStateField('user', {
         name: user.name,
         color: user.color,
+        avatarUrl: user.avatarUrl || null,
       });
 
       return [yCursorPlugin(awareness, { cursorBuilder, selectionBuilder })];

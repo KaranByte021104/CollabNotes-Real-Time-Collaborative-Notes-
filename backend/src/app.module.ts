@@ -16,6 +16,7 @@ import { Tag } from './entities/tag.entity';
 import { Notification } from './entities/notification.entity';
 import { PasswordResetOtp } from './entities/password-reset-otp.entity';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ProfileModule } from './profile/profile.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     WorkspacesModule,
     CollaborationModule,
     NotificationsModule,
+    ProfileModule,
   ],
   controllers: [AppController],
   providers: [AppService],

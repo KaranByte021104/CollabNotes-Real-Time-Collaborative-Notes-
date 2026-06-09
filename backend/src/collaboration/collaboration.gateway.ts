@@ -74,6 +74,7 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
         userId: user.id,
         name: user.name,
         email: user.email,
+        avatarUrl: user.avatarUrl,
       };
 
       await client.join('user:' + user.id);
@@ -143,7 +144,7 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     client.join(workspaceId);
 
     // 3. Add to OnlineUsersStore
-    const onlineUser = this.onlineUsersStore.addUser(workspaceId, user.userId, user.name, client.id);
+    const onlineUser = this.onlineUsersStore.addUser(workspaceId, user.userId, user.name, client.id, user.avatarUrl);
 
     // 4. Resolve correct active note ID
     let activeNoteId = noteId;

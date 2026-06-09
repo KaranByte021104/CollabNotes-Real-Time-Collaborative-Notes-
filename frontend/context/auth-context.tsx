@@ -9,6 +9,9 @@ interface User {
   id: string;
   name: string;
   email: string;
+  avatarUrl?: string | null;
+  bio?: string | null;
+  createdAt?: string;
 }
 
 interface DecodedToken {
@@ -24,6 +27,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
+  updateUser: (updatedUser: User) => void;
   isLoading: boolean;
 }
 
@@ -38,6 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     // Check if token exists in localStorage on mount
     const storedToken = localStorage.getItem('collab_notes_token');
+    const storedUser = localStorage.getItem('user');
     if (storedToken) {
       try {
         const decoded = jwtDecode<DecodedToken>(storedToken);
@@ -45,11 +50,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const currentTime = Date.now() / 1000;
         if (decoded.exp > currentTime) {
           setToken(storedToken);
-          setUser({
-            id: decoded.sub,
-            name: decoded.name,
-            email: decoded.email,
-          });
+          if (storedUser) {
+            setUser(JSON.parse(storedUser));
+          } else {
+            setUser({
+              id: decoded.sub,
+              name: decoded.name,
+              email: decoded.email,
+            });
+          }
         } else {
           // Token expired, clear it
           handleClearAuth();
@@ -66,6 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(accessToken);
     setUser(loggedInUser);
     localStorage.setItem('collab_notes_token', accessToken);
+    localStorage.setItem('user', JSON.stringify(loggedInUser));
     // Set non-httpOnly cookie for next.js middleware server-side reading
     document.cookie = `collab_notes_token=${accessToken}; path=/; SameSite=Lax`;
   };
@@ -74,6 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(null);
     setUser(null);
     localStorage.removeItem('collab_notes_token');
+    localStorage.removeItem('user');
     // Clear cookie
     document.cookie = 'collab_notes_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC; SameSite=Lax';
   };
@@ -97,8 +108,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.location.replace('/login');
   };
 
+  const updateUser = (updatedUser: User) => {
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, token, login, register, logout, updateUser, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

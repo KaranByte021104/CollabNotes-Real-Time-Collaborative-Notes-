@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { FileText, LogOut, ChevronDown, User, Sun, Moon, Loader2, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ socket }) => {
   const { user, logout } = useAuth();
+  const router = useRouter();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
@@ -123,6 +125,11 @@ export const Navbar: React.FC<NavbarProps> = ({ socket }) => {
     return colors[Math.abs(hash) % colors.length];
   };
 
+  const getBackendUrl = () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+    return apiUrl.replace(/\/api$/, '');
+  };
+
   const userName = user?.name || 'User';
   const userInitial = userName.charAt(0).toUpperCase();
   const avatarColor = getAvatarColor(userName);
@@ -160,9 +167,17 @@ export const Navbar: React.FC<NavbarProps> = ({ socket }) => {
               onClick={() => setDropdownOpen(!dropdownOpen)}
               className="flex items-center gap-2 p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus:outline-none"
             >
-              <div className={`size-8 rounded-full ${avatarColor} text-white flex items-center justify-center font-bold shadow-sm`}>
-                {userInitial}
-              </div>
+              {user?.avatarUrl ? (
+                <img
+                  src={`${getBackendUrl()}${user.avatarUrl}`}
+                  alt={userName}
+                  className="size-8 rounded-full object-cover shadow-sm"
+                />
+              ) : (
+                <div className={`size-8 rounded-full ${avatarColor} text-white flex items-center justify-center font-bold shadow-sm`}>
+                  {userInitial}
+                </div>
+              )}
               <span className="text-sm font-semibold text-slate-700 dark:text-slate-350 hidden sm:inline truncate max-w-[120px]">
                 {userName}
               </span>
@@ -177,6 +192,18 @@ export const Navbar: React.FC<NavbarProps> = ({ socket }) => {
                 </div>
                 
                 <div className="p-1.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      router.push('/profile');
+                    }}
+                    className="w-full justify-start text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 font-medium mb-1"
+                  >
+                    <User className="mr-2 size-4" />
+                    <span>View Profile</span>
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"

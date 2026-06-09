@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
 import { Workspace } from './workspace.entity';
 import { WorkspaceParticipant } from './workspace-participant.entity';
 import { ActivityLog } from './activity-log.entity';
@@ -17,8 +17,17 @@ export class User {
   @Column()
   password?: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  avatarUrl: string | null;
+
+  @Column({ type: 'varchar', nullable: true, length: 160 })
+  bio: string | null;
+
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamp' })
+  updatedAt: Date;
 
   @OneToMany(() => Workspace, (workspace) => workspace.createdBy)
   ownedWorkspaces: Workspace[];

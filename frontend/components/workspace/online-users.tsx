@@ -5,6 +5,7 @@ export interface OnlineUser {
   name: string;
   socketId: string;
   color: string;
+  avatarUrl?: string | null;
 }
 
 interface OnlineUsersProps {
@@ -16,6 +17,11 @@ export function OnlineUsers({ users, currentUserId }: OnlineUsersProps) {
   const maxDisplay = 8;
   const displayedUsers = users.slice(0, maxDisplay);
   const extraCount = users.length - maxDisplay;
+
+  const getBackendUrl = () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+    return apiUrl.replace(/\/api$/, '');
+  };
 
   return (
     <div className="space-y-4">
@@ -41,12 +47,20 @@ export function OnlineUsers({ users, currentUserId }: OnlineUsersProps) {
             return (
               <div key={`${user.userId}-${user.socketId}`} className="flex items-center gap-3 group">
                 <div className="relative shrink-0">
-                  <div 
-                    className="size-9 rounded-full text-xs font-bold text-white flex items-center justify-center shadow-inner transition-transform group-hover:scale-105"
-                    style={{ backgroundColor: user.color || '#6366f1' }}
-                  >
-                    {initials}
-                  </div>
+                  {user.avatarUrl ? (
+                    <img
+                      src={`${getBackendUrl()}${user.avatarUrl}`}
+                      alt={user.name}
+                      className="size-9 rounded-full object-cover shadow-inner transition-transform group-hover:scale-105"
+                    />
+                  ) : (
+                    <div 
+                      className="size-9 rounded-full text-xs font-bold text-white flex items-center justify-center shadow-inner transition-transform group-hover:scale-105"
+                      style={{ backgroundColor: user.color || '#6366f1' }}
+                    >
+                      {initials}
+                    </div>
+                  )}
                   <span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-green-500 border-2 border-white dark:border-slate-900"></span>
                 </div>
                 <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate max-w-[170px]">

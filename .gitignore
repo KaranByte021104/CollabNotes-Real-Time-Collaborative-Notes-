@@ -36,4 +36,5 @@ Thumbs.db
 
 # Project-specific ignores
 sprints/
+backend/uploads/
 

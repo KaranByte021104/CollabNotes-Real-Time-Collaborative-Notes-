@@ -33,6 +33,11 @@ CollabNotes is designed for teams requiring fast, zero-latency collaborative doc
 * **Password Reset via Email OTP**: Securely reset credentials using a 6-digit OTP code sent via SMTP (e.g., Mailtrap in development). Features a rate-limiting 60-second request cooldown, 15-minute expiration, single-use validation, and secure bcrypt hashing.
 * **In-App Password Update (Change Password)**: Logged-in users can update their passwords through a "Change Password" dialog in the user settings menu, immediately logging them out and invalidating their active session on success.
 
+### 1.5 Sprint 11 Features
+* **Profile & Avatar Management**: A dedicated `/profile` editing page for modifying user name, bio (max 160 characters), and avatar photo upload.
+* **Local Development Avatar Storage**: Uploaded files are resized to 256x256 cover crop, converted to JPEG, and compressed to 80% quality using `sharp`. Saved in `backend/uploads/avatars/` and served statically.
+* **Real-time Identity Propagation**: Updates to name or avatar are instantly propagated to the Navbar, workspace online users panel, and Yjs awareness cursors.
+
 ---
 
 ## 2. Tech Stack
@@ -214,6 +219,14 @@ All API requests under `/api` require a valid JWT `Authorization: Bearer <token>
 | **PATCH**| `/api/notifications/read-all`| Yes | Mark all user notifications as read | None | `{"success": true}` |
 | **PATCH**| `/api/notifications/:id/read`| Yes | Mark notification as read | None | `{"id": "uuid", "isRead": true}` |
 
+### 6.7 Profile Endpoints
+| Method | Path | Auth | Description | Request Body | Response Shape |
+|---|---|---|---|---|---|
+| **GET** | `/api/profile` | Yes | Get current user's profile | None | `{"id": "uuid", "name": "...", "email": "...", "avatarUrl": "...", "bio": "...", "createdAt": "..."}` |
+| **PATCH** | `/api/profile` | Yes | Update name and/or bio | `{"name": "...", "bio": "..."}` | `{"id": "uuid", "name": "...", "email": "...", "avatarUrl": "...", "bio": "...", "createdAt": "..."}` |
+| **POST** | `/api/profile/avatar` | Yes | Upload avatar image (multipart/form-data) | *(avatar file)* | `{"id": "uuid", "name": "...", "email": "...", "avatarUrl": "...", "bio": "...", "createdAt": "..."}` |
+| **DELETE** | `/api/profile/avatar` | Yes | Revert to generated initials avatar | None | `{"id": "uuid", "name": "...", "email": "...", "avatarUrl": null, "bio": "...", "createdAt": "..."}` |
+
 ---
 
 ## 7. Socket.IO Events Reference
@@ -266,3 +279,16 @@ All API requests under `/api` require a valid JWT `Authorization: Bearer <token>
 * **No Asset Embeds**: The WYSIWYG editor supports structured formatting (headings, lists, alignments, underlines) but does not allow direct file uploads or local image embeds, which would require cloud bucket integrations.
 * **Snapshot Save Delay**: The REST-readable `content` snapshot database column is synced every 5 seconds. Although the primary `ydocState` binary is saved immediately on disconnect, the plain-text column might lag slightly behind the live cursor state during active typing sessions.
 * **Unencrypted Data Storage**: Note contents and binary updates are saved in plain format inside PostgreSQL. Sensitive enterprise workspaces should be protected via column-level database encryption layers.
+* **Local Avatar Storage**: Uploaded avatars are stored on the local server filesystem (`backend/uploads/avatars/`) during local development. For production deployments, this local storage should be replaced with a cloud object storage service (e.g. AWS S3, Cloudflare R2, or similar) to support horizontal scaling and containerized deployments.
+
+---
+
+## 10. Profile & Avatar
+
+CollabNotes includes support for personalizing user accounts via profile names, bios, and custom avatars:
+
+* **Avatar Storage**: In the development environment, uploaded avatar images are stored locally under `backend/uploads/avatars/`. They are served statically by NestJS to make them accessible via URL.
+* **Sharp Processing**: On upload, image files are processed using the `sharp` library to crop and resize them to a maximum dimension of `256x256px` (cover crop), converted to standard JPEG format, and compressed to `80%` quality to reduce file sizes and load latency.
+* **Production Upgrade Path**: Storing files on the local disk is a development-only mechanism. In a production cloud environment, this should be upgraded to use a cloud storage bucket provider (e.g., AWS S3, Cloudflare R2, or Google Cloud Storage) to ensure assets persist across auto-scaling containers and server restarts.
+* **Email Constraints**: Once a user registers their account, the associated email address is locked and **cannot be changed**. All updates to profiles are restricted to the display name, bio, and avatar.
+

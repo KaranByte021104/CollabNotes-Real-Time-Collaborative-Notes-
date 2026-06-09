@@ -707,6 +707,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
   const currentUser = {
     name: user?.name || 'Anonymous User',
     color: currentUserColor,
+    avatarUrl: user?.avatarUrl || null,
   };
 
   const isCreator = workspace.createdBy.id === user?.id;

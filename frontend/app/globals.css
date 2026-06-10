@@ -185,3 +185,30 @@
   opacity: 1;
   transform: translateY(0) scale(1);
 }
+
+/* ── Tiptap Editor Placeholder ───────────────────────────────────── */
+.tiptap [data-placeholder].is-empty::before,
+.tiptap [data-placeholder].is-editor-empty::before,
+.prose .tiptap [data-placeholder].is-empty::before,
+.prose .tiptap [data-placeholder].is-editor-empty::before,
+.tiptap p.is-empty::before,
+.tiptap p.is-editor-empty::before,
+.prose .tiptap p.is-empty::before,
+.prose .tiptap p.is-editor-empty::before {
+  content: attr(data-placeholder) !important;
+  color: #64748b !important;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.dark .tiptap [data-placeholder].is-empty::before,
+.dark .tiptap [data-placeholder].is-editor-empty::before,
+.dark .prose .tiptap [data-placeholder].is-empty::before,
+.dark .prose .tiptap [data-placeholder].is-editor-empty::before,
+.dark .tiptap p.is-empty::before,
+.dark .tiptap p.is-editor-empty::before,
+.dark .prose .tiptap p.is-empty::before,
+.dark .prose .tiptap p.is-editor-empty::before {
+  color: #475569 !important;
+}

@@ -3,13 +3,17 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { ProfileService } from './profile.service';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { IsString, IsOptional, Length, MaxLength } from 'class-validator';
+import { IsString, IsOptional, Length, MaxLength, IsEmail } from 'class-validator';
 
 class UpdateProfileDto {
   @IsOptional()
   @IsString()
   @Length(2, 60, { message: 'Name must be between 2 and 60 characters.' })
   name?: string;
+
+  @IsOptional()
+  @IsEmail({}, { message: 'Please provide a valid email address.' })
+  email?: string;
 
   @IsOptional()
   @IsString()
@@ -29,10 +33,10 @@ export class ProfileController {
 
   @Patch()
   async updateProfile(@CurrentUser() user: any, @Body() dto: UpdateProfileDto) {
-    if (dto.name === undefined && dto.bio === undefined) {
-      throw new BadRequestException('At least one of name or bio must be provided.');
+    if (dto.name === undefined && dto.bio === undefined && dto.email === undefined) {
+      throw new BadRequestException('At least one of name, bio, or email must be provided.');
     }
-    return this.profileService.updateProfile(user.userId, dto.name, dto.bio);
+    return this.profileService.updateProfile(user.userId, dto.name, dto.bio, dto.email);
   }
 
   @Post('avatar')

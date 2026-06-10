@@ -32,8 +32,10 @@ export default function ProfilePage() {
 
   // Form states
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [bio, setBio] = useState('');
   const [nameError, setNameError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   
   // Loading & uploading states
   const [isSaving, setIsSaving] = useState(false);
@@ -46,6 +48,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (user) {
       setName(user.name);
+      setEmail(user.email);
       setBio(user.bio || '');
     }
   }, [user]);
@@ -78,8 +81,8 @@ export default function ProfilePage() {
     return apiUrl.replace(/\/api$/, '');
   };
 
-  const hasChanges = name.trim() !== user.name || bio !== (user.bio || '');
-  const isValid = name.trim().length >= 2 && name.trim().length <= 60 && bio.length <= 160 && !nameError;
+  const hasChanges = name.trim() !== user.name || email.trim() !== user.email || bio !== (user.bio || '');
+  const isValid = name.trim().length >= 2 && name.trim().length <= 60 && bio.length <= 160 && !nameError && email.trim() && !emailError;
 
   const handleNameChange = (val: string) => {
     setName(val);
@@ -89,6 +92,18 @@ export default function ProfilePage() {
       setNameError('Name must not exceed 60 characters.');
     } else {
       setNameError(null);
+    }
+  };
+
+  const handleEmailChange = (val: string) => {
+    setEmail(val);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!val.trim()) {
+      setEmailError('Email is required.');
+    } else if (!emailRegex.test(val.trim())) {
+      setEmailError('Please enter a valid email address.');
+    } else {
+      setEmailError(null);
     }
   };
 
@@ -169,7 +184,7 @@ export default function ProfilePage() {
 
     setIsSaving(true);
     try {
-      const response = await api.patch('/profile', { name, bio });
+      const response = await api.patch('/profile', { name, email, bio });
       updateUser(response.data);
       toast.success('Profile updated');
     } catch (err: any) {
@@ -309,17 +324,23 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* Email Address (disabled) */}
+              {/* Email Address */}
               <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-sm font-bold text-slate-400 dark:text-slate-600">Email Address (Read-only)</Label>
+                <Label htmlFor="email" className="text-sm font-bold text-slate-700 dark:text-slate-300">Email Address</Label>
                 <Input
                   id="email"
                   type="email"
-                  value={user.email}
-                  disabled
-                  className="border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-900/60 text-slate-400 dark:text-slate-600 cursor-not-allowed"
+                  value={email}
+                  onChange={(e) => handleEmailChange(e.target.value)}
+                  placeholder="Your Email"
+                  className={`border-slate-200 dark:border-slate-800 focus-visible:ring-indigo-500 ${
+                    emailError ? 'border-red-500 focus-visible:ring-red-500' : ''
+                  }`}
+                  required
                 />
-                <span className="text-[10px] text-slate-400 dark:text-slate-600 mt-0.5 block">Email cannot be changed</span>
+                {emailError && (
+                  <p className="text-xs font-semibold text-red-500 mt-0.5">{emailError}</p>
+                )}
               </div>
 
               {/* Bio */}

@@ -30,7 +30,7 @@ export class ProfileService {
     };
   }
 
-  async updateProfile(userId: string, name?: string, bio?: string) {
+  async updateProfile(userId: string, name?: string, bio?: string, email?: string) {
     const user = await this.userRepository.findOne({
       where: { id: userId },
     });
@@ -50,6 +50,19 @@ export class ProfileService {
         throw new BadRequestException('Bio must not exceed 160 characters.');
       }
       user.bio = bio.trim();
+    }
+
+    if (email !== undefined) {
+      const lowercaseEmail = email.toLowerCase().trim();
+      if (lowercaseEmail !== user.email) {
+        const existingUser = await this.userRepository.findOne({
+          where: { email: lowercaseEmail },
+        });
+        if (existingUser) {
+          throw new BadRequestException('Email already in use.');
+        }
+        user.email = lowercaseEmail;
+      }
     }
 
     const updatedUser = await this.userRepository.save(user);

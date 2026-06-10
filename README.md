@@ -223,7 +223,7 @@ All API requests under `/api` require a valid JWT `Authorization: Bearer <token>
 | Method | Path | Auth | Description | Request Body | Response Shape |
 |---|---|---|---|---|---|
 | **GET** | `/api/profile` | Yes | Get current user's profile | None | `{"id": "uuid", "name": "...", "email": "...", "avatarUrl": "...", "bio": "...", "createdAt": "..."}` |
-| **PATCH** | `/api/profile` | Yes | Update name and/or bio | `{"name": "...", "bio": "..."}` | `{"id": "uuid", "name": "...", "email": "...", "avatarUrl": "...", "bio": "...", "createdAt": "..."}` |
+| **PATCH** | `/api/profile` | Yes | Update name, email and/or bio | `{"name": "...", "email": "...", "bio": "..."}` | `{"id": "uuid", "name": "...", "email": "...", "avatarUrl": "...", "bio": "...", "createdAt": "..."}` |
 | **POST** | `/api/profile/avatar` | Yes | Upload avatar image (multipart/form-data) | *(avatar file)* | `{"id": "uuid", "name": "...", "email": "...", "avatarUrl": "...", "bio": "...", "createdAt": "..."}` |
 | **DELETE** | `/api/profile/avatar` | Yes | Revert to generated initials avatar | None | `{"id": "uuid", "name": "...", "email": "...", "avatarUrl": null, "bio": "...", "createdAt": "..."}` |
 
@@ -290,5 +290,5 @@ CollabNotes includes support for personalizing user accounts via profile names, 
 * **Avatar Storage**: In the development environment, uploaded avatar images are stored locally under `backend/uploads/avatars/`. They are served statically by NestJS to make them accessible via URL.
 * **Sharp Processing**: On upload, image files are processed using the `sharp` library to crop and resize them to a maximum dimension of `256x256px` (cover crop), converted to standard JPEG format, and compressed to `80%` quality to reduce file sizes and load latency.
 * **Production Upgrade Path**: Storing files on the local disk is a development-only mechanism. In a production cloud environment, this should be upgraded to use a cloud storage bucket provider (e.g., AWS S3, Cloudflare R2, or Google Cloud Storage) to ensure assets persist across auto-scaling containers and server restarts.
-* **Email Constraints**: Once a user registers their account, the associated email address is locked and **cannot be changed**. All updates to profiles are restricted to the display name, bio, and avatar.
+* **Email Editing**: Users can change their email address from their profile page. Updating the email address updates it globally. When signing in again, only the new email address will be recognized by the application.
 

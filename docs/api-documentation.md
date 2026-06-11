@@ -15,9 +15,10 @@ All API routes are prefixed with `/api`. Unless noted otherwise, routes require 
 |---|---|---|---|---|---|
 | **POST** | `/register` | No | Create a new user profile. | `{"name": "...", "email": "...", "password": "..."}` | `{"access_token": "...", "user": {...}}` |
 | **POST** | `/login` | No | Authenticate user credentials. | `{"email": "...", "password": "..."}` | `{"access_token": "...", "user": {...}}` |
-| **POST** | `/forgot-password` | No | Request a 6-digit password reset OTP sent via SMTP. | `{"email": "..."}` | `{"message": "..."}` |
-| **POST** | `/reset-password` | No | Verify OTP code and set new password. | `{"email": "...", "otp": "...", "newPassword": "...", "confirmPassword": "..."}` | `{"message": "..."}` |
-| **PATCH** | `/change-password` | Yes | Change password while authenticated. Logs out other sessions. | `{"currentPassword": "...", "newPassword": "..."}` | `{"message": "..."}` |
+| **POST** | `/forgot-password` | No | Step 1: Request a 6-digit password reset OTP. | `{"email": "..."}` | `{"message": "..."}` |
+| **POST** | `/verify-otp` | No | Step 2: Verify OTP and receive a short-lived reset token. | `{"email": "...", "otp": "..."}` | `{"resetToken": "..."}` |
+| **POST** | `/reset-password` | No | Step 3: Submit new password using the reset token. | `{"resetToken": "...", "newPassword": "...", "confirmPassword": "..."}` | `{"message": "..."}` |
+| **PATCH** | `/change-password` | Yes | Change password while authenticated. Logs out active session. | `{"currentPassword": "...", "newPassword": "..."}` | `{"message": "..."}` |
 
 ---
 

@@ -1,11 +1,20 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException, HttpStatus, HttpException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { User } from '../entities/user.entity';
 import { PasswordResetOtp } from '../entities/password-reset-otp.entity';
 import { MailService } from '../mail/mail.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
+
+// Custom class for TooManyRequestsException as NestJS doesn't have it built-in directly
+class TooManyRequestsException extends HttpException {
+  constructor(message: string) {
+    super(message, HttpStatus.TOO_MANY_REQUESTS);
+  }
+}
 
 @Injectable()
 export class PasswordResetService {
@@ -15,7 +24,13 @@ export class PasswordResetService {
     @InjectRepository(PasswordResetOtp)
     private readonly otpRepository: Repository<PasswordResetOtp>,
     private readonly mailService: MailService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
+
+  private getJwtSecret(): string {
+    return this.configService.get<string>('JWT_SECRET', 'supersecretjwtsecretkeyshouldbechangedinproduction');
+  }
 
   async requestOtp(email: string): Promise<{ message: string }> {
     const lowercaseEmail = email.toLowerCase().trim();
@@ -31,7 +46,7 @@ export class PasswordResetService {
     });
 
     if (recentOtp) {
-      throw new BadRequestException('Please wait 60 seconds before requesting another code.');
+      throw new TooManyRequestsException('Please wait before requesting another code.');
     }
 
     // Find user by email
@@ -39,7 +54,7 @@ export class PasswordResetService {
 
     // Prevent email enumeration: return success even if user not found
     if (!user) {
-      return { message: 'If an account exists with that email, a password reset code has been sent.' };
+      return { message: 'If an account with that email exists, you will receive a reset code shortly.' };
     }
 
     // Invalidate all previous unused OTPs for this user
@@ -63,70 +78,102 @@ export class PasswordResetService {
     otpRecord.email = lowercaseEmail;
     otpRecord.otp = hashedOtp;
     otpRecord.expiresAt = expiresAt;
+    otpRecord.isUsed = false;
     await this.otpRepository.save(otpRecord);
 
-    // Send email (async, but we await it to catch errors or log properly)
+    // Send email using MailService
     try {
       await this.mailService.sendOtpEmail(lowercaseEmail, user.name, plainOtp);
     } catch (error) {
-      // Log error but don't expose SMTP failures to frontend, return same generic message
       console.error('Failed to send OTP email:', error);
+      throw new ServiceUnavailableException('Failed to send OTP email. Please try again.');
     }
 
-    return { message: 'If an account exists with that email, a password reset code has been sent.' };
+    return { message: 'If an account with that email exists, you will receive a reset code shortly.' };
   }
 
-  async verifyOtpAndResetPassword(
-    email: string,
-    otp: string,
-    newPassword: string,
-  ): Promise<{ message: string }> {
+  async verifyOtp(email: string, otp: string): Promise<{ resetToken: string }> {
     const lowercaseEmail = email.toLowerCase().trim();
 
-    // Find the latest active (unused, not expired) OTP for this email
-    const now = new Date();
-    const activeOtps = await this.otpRepository.find({
+    // Find the latest unused OTP for this email
+    const record = await this.otpRepository.findOne({
       where: {
         email: lowercaseEmail,
         isUsed: false,
-        expiresAt: MoreThan(now),
       },
       order: { createdAt: 'DESC' },
     });
 
-    if (activeOtps.length === 0) {
-      throw new BadRequestException('Invalid or expired verification code.');
+    if (!record || record.expiresAt < new Date()) {
+      throw new BadRequestException('Invalid or expired code. Please request a new one.');
     }
 
-    // Find the correct matching OTP (there might be multiple within 15 minutes, but the latest is index 0)
-    let matchedOtpRecord: PasswordResetOtp | null = null;
-    for (const record of activeOtps) {
-      const isValid = await bcrypt.compare(otp, record.otp);
-      if (isValid) {
-        matchedOtpRecord = record;
-        break;
-      }
+    // Compare plain OTP against stored hash
+    const isOtpValid = await bcrypt.compare(otp, record.otp);
+    if (!isOtpValid) {
+      throw new BadRequestException('Incorrect code. Please try again.');
     }
 
-    if (!matchedOtpRecord) {
-      throw new BadRequestException('Invalid or expired verification code.');
-    }
-
-    // Mark the matched OTP as used
-    matchedOtpRecord.isUsed = true;
-    await this.otpRepository.save(matchedOtpRecord);
-
-    // Update the user's password
-    const user = await this.userRepository.findOne({ where: { id: matchedOtpRecord.userId } });
+    // Find user to include in token payload
+    const user = await this.userRepository.findOne({ where: { id: record.userId } });
     if (!user) {
-      throw new BadRequestException('Invalid or expired verification code.');
+      throw new BadRequestException('Invalid or expired code. Please request a new one.');
     }
 
-    // Hash and update password
+    // Generate signed JWT reset token
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      purpose: 'password_reset',
+      otpId: record.id,
+    };
+
+    const resetToken = this.jwtService.sign(payload, {
+      secret: this.getJwtSecret(),
+      expiresIn: '10m',
+    });
+
+    return { resetToken };
+  }
+
+  async resetPassword(resetToken: string, newPassword: string): Promise<{ message: string }> {
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(resetToken, {
+        secret: this.getJwtSecret(),
+      });
+    } catch (error) {
+      throw new UnauthorizedException('Reset token is invalid or has expired. Please start over.');
+    }
+
+    if (payload.purpose !== 'password_reset') {
+      throw new UnauthorizedException('Invalid token purpose.');
+    }
+
+    // Find OTP record
+    const otpRecord = await this.otpRepository.findOne({ where: { id: payload.otpId } });
+    if (!otpRecord || otpRecord.isUsed) {
+      throw new BadRequestException('This reset link has already been used. Please request a new code.');
+    }
+
+    if (otpRecord.expiresAt < new Date()) {
+      throw new BadRequestException('Reset code has expired. Please request a new one.');
+    }
+
+    // Mark OTP as used
+    otpRecord.isUsed = true;
+    await this.otpRepository.save(otpRecord);
+
+    // Hash new password and save to User
+    const user = await this.userRepository.findOne({ where: { id: otpRecord.userId } });
+    if (!user) {
+      throw new BadRequestException('User not found.');
+    }
+
     user.password = await bcrypt.hash(newPassword, 10);
     await this.userRepository.save(user);
 
-    return { message: 'Password reset successfully.' };
+    return { message: 'Password reset successfully. You can now log in with your new password.' };
   }
 
   async changePassword(
@@ -142,7 +189,7 @@ export class PasswordResetService {
 
     const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
     if (!isPasswordValid) {
-      throw new BadRequestException('Incorrect current password.');
+      throw new UnauthorizedException('Current password is incorrect.');
     }
 
     user.password = await bcrypt.hash(newPassword, 10);

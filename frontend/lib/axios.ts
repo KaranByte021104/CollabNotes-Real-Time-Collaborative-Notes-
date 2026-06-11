@@ -26,7 +26,10 @@ api.interceptors.response.use(
   (error) => {
     if (error.response && error.response.status === 401) {
       const requestUrl = error.config?.url || '';
-      const isAuthEndpoint = requestUrl.includes('/auth/login') || requestUrl.includes('/auth/register');
+      const isAuthEndpoint = 
+        requestUrl.includes('/auth/login') || 
+        requestUrl.includes('/auth/register') || 
+        requestUrl.includes('/auth/change-password');
 
       if (!isAuthEndpoint && typeof window !== 'undefined') {
         localStorage.removeItem('collab_notes_token');

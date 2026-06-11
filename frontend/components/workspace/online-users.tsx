@@ -1,4 +1,5 @@
 import React from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export interface OnlineUser {
   userId: string;
@@ -11,9 +12,10 @@ export interface OnlineUser {
 interface OnlineUsersProps {
   users: OnlineUser[];
   currentUserId?: string;
+  isConnected?: boolean;
 }
 
-export function OnlineUsers({ users, currentUserId }: OnlineUsersProps) {
+export function OnlineUsers({ users, currentUserId, isConnected = true }: OnlineUsersProps) {
   const maxDisplay = 8;
   const displayedUsers = users.slice(0, maxDisplay);
   const extraCount = users.length - maxDisplay;
@@ -32,12 +34,21 @@ export function OnlineUsers({ users, currentUserId }: OnlineUsersProps) {
         </div>
         <h3 className="text-sm font-bold text-slate-900 dark:text-white">Online Now</h3>
         <span className="text-xs font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-full">
-          {users.length}
+          {isConnected ? users.length : 0}
         </span>
       </div>
 
       <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
-        {users.length === 0 ? (
+        {!isConnected ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="size-9 rounded-full" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+            ))}
+          </div>
+        ) : users.length === 0 ? (
           <p className="text-xs text-slate-400 dark:text-slate-500 text-center py-4">No active members</p>
         ) : (
           displayedUsers.map((user) => {

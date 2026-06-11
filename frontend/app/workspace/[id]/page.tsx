@@ -992,7 +992,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
           <div className="hidden lg:flex w-[280px] shrink-0 flex-col gap-6 lg:h-[calc(100vh-130px)] lg:sticky lg:top-[100px]">
             {/* Online Users */}
             <div className="bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 backdrop-blur-md shadow-sm">
-              <OnlineUsers users={onlineUsers} currentUserId={user?.id} />
+              <OnlineUsers users={onlineUsers} currentUserId={user?.id} isConnected={isConnected} />
             </div>
 
             <Separator className="bg-slate-200/60 dark:bg-slate-800/60" />
@@ -1118,7 +1118,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
             
             {/* Online Users */}
             <div className="bg-slate-50/50 dark:bg-slate-950/20 border border-slate-200/50 dark:border-slate-800/80 rounded-2xl p-4 shadow-xs">
-              <OnlineUsers users={onlineUsers} currentUserId={user?.id} />
+              <OnlineUsers users={onlineUsers} currentUserId={user?.id} isConnected={isConnected} />
             </div>
 
             <Separator className="bg-slate-200/60 dark:bg-slate-800/60" />

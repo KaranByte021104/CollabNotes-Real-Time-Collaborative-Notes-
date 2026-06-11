@@ -155,3 +155,21 @@ Follow these steps to configure and run CollabNotes locally:
 * **Snapshot Save Delay**: The REST-readable `content` snapshot database column is synced every 5 seconds. Although the primary `ydocState` binary is saved immediately on disconnect, the plain-text column might lag slightly behind the live cursor state during active typing sessions.
 * **Unencrypted Data Storage**: Note contents and binary updates are saved in plain format inside PostgreSQL. Sensitive enterprise workspaces should be protected via column-level database encryption layers.
 * **Local Avatar Storage**: Uploaded avatars are stored on the local server filesystem (`backend/uploads/avatars/`) during local development. For production deployments, this local storage should be replaced with a cloud object storage service (e.g. AWS S3, Cloudflare R2, or similar) to support horizontal scaling and containerized deployments.
+
+---
+
+## 7. Security Considerations
+
+CollabNotes implements industry-standard security measures to safeguard user authentication and password management. The key security controls include:
+
+* **3-Step Password Reset Flow**: OTP verification and password reset are split into distinct steps. Verifying the OTP issues a signed, temporary reset token (JWT). The password can only be updated with this valid token; the OTP itself cannot be used to change the password directly.
+* **Cryptographically Signed Reset Tokens**: Reset tokens are signed using the server's `JWT_SECRET`. They include a `purpose: 'password_reset'` claim, ensuring they cannot be used as session tokens for accessing protected workspace API endpoints.
+* **OTP Hashing**: Verification codes (OTPs) are hashed using `bcrypt` prior to database storage, ensuring that a database compromise does not expose plain-text active codes.
+* **Email Enumeration Protection**: The forgot password endpoint returns a generic response message regardless of whether the email address exists in the system.
+* **Strict Code Expiration**: Verification codes (OTPs) expire 15 minutes after generation, and reset tokens expire 10 minutes after generation.
+* **One-Time Token Use**: The OTP record is marked as `isUsed = true` as soon as the password is reset. This permanently invalidates the associated reset token, preventing replay attacks.
+* **Previous Code Invalidation**: Generating a new OTP automatically invalidates all previously generated OTPs for that user.
+* **Rate Limiting (Request Cooldown)**: A 60-second cooldown is enforced between OTP generation requests per email to prevent spam and SMTP abuse.
+* **State-Only Token Storage**: The frontend stores the temporary reset token exclusively in component memory (React state). It is never written to `localStorage` or `sessionStorage`, and is discarded immediately on page reload.
+* **Session Invalidation on Password Change**: Changing your password immediately invalidates active sessions and logs the user out, requiring them to sign in with their new credentials.
+

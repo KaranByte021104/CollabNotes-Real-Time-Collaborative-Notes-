@@ -62,7 +62,7 @@ export function useCollaboration(workspaceId: string, noteId: string) {
     const socket = io(socketUrl, {
       auth: { token },
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
     });
@@ -285,15 +285,62 @@ export function useCollaboration(workspaceId: string, noteId: string) {
     socket.on('user_joined', (data: { user: OnlineUser; onlineUsers: OnlineUser[] }) => {
       setOnlineUsers(data.onlineUsers);
       toast.info(`${data.user.name} joined the workspace`);
+      
+      setActivityLogs((prev) => {
+        const name = data.user.name;
+        // Check if the most recent log is already a connection event for this user to avoid duplicates
+        const recentLog = prev[0];
+        if (
+          recentLog && 
+          recentLog.eventType === 'user_connected' && 
+          (recentLog.metadata?.name === name || recentLog.metadata?.userName === name)
+        ) {
+          return prev;
+        }
+
+        const newLog: ActivityLog = {
+          id: `presence-join-${data.user.userId}-${Date.now()}`,
+          eventType: 'user_connected',
+          createdAt: new Date().toISOString(),
+          metadata: { name }
+        };
+        return [newLog, ...prev.slice(0, 49)];
+      });
     });
 
     socket.on('user_left', (data: { user: OnlineUser; onlineUsers: OnlineUser[] }) => {
       setOnlineUsers(data.onlineUsers);
       toast.info(`${data.user.name} left the workspace`);
+      
+      setActivityLogs((prev) => {
+        const name = data.user.name;
+        // Check if the most recent log is already a disconnection event for this user to avoid duplicates
+        const recentLog = prev[0];
+        if (
+          recentLog && 
+          recentLog.eventType === 'user_disconnected' && 
+          (recentLog.metadata?.name === name || recentLog.metadata?.userName === name)
+        ) {
+          return prev;
+        }
+
+        const newLog: ActivityLog = {
+          id: `presence-leave-${data.user.userId}-${Date.now()}`,
+          eventType: 'user_disconnected',
+          createdAt: new Date().toISOString(),
+          metadata: { name }
+        };
+        return [newLog, ...prev.slice(0, 49)];
+      });
     });
 
     socket.on('activity_log_added', (newLog: ActivityLog) => {
-      setActivityLogs((prevLogs) => [newLog, ...prevLogs.slice(0, 49)]);
+      setActivityLogs((prevLogs) => {
+        if (prevLogs.some(log => log.id === newLog.id)) {
+          return prevLogs;
+        }
+        return [newLog, ...prevLogs.slice(0, 49)];
+      });
     });
 
     socket.on('error', (err: { message: string }) => {

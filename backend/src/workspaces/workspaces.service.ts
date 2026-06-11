@@ -148,7 +148,15 @@ export class WorkspacesService {
       activityLog.workspace = workspace;
       activityLog.user = user;
       activityLog.metadata = { name: user.name };
-      await this.logRepository.save(activityLog);
+      const savedLog = await this.logRepository.save(activityLog);
+
+      // Broadcast activity log
+      this.collaborationGateway.broadcastToRoom(workspace.id, 'activity_log_added', {
+        id: savedLog.id,
+        eventType: savedLog.eventType,
+        createdAt: savedLog.createdAt,
+        metadata: savedLog.metadata,
+      });
     }
 
     return workspace;

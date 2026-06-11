@@ -32,10 +32,24 @@ export function ActivityFeed({ logs }: ActivityFeedProps) {
         };
       case 'user_left':
         return {
-          message: `${name} left the workspace entirely`,
+          message: `${name} left the workspace`,
           icon: <UserMinus className="size-3.5 text-red-500" />,
           bgColor: 'bg-red-50 dark:bg-red-950/20',
           borderColor: 'border-red-100 dark:border-red-900/20',
+        };
+      case 'user_connected':
+        return {
+          message: `${name} joined the session`,
+          icon: <UserPlus className="size-3.5 text-emerald-500" />,
+          bgColor: 'bg-emerald-50/50 dark:bg-emerald-950/10',
+          borderColor: 'border-emerald-100/50 dark:border-emerald-900/10',
+        };
+      case 'user_disconnected':
+        return {
+          message: `${name} left the session`,
+          icon: <UserMinus className="size-3.5 text-slate-400" />,
+          bgColor: 'bg-slate-50/50 dark:bg-slate-900/10',
+          borderColor: 'border-slate-100/50 dark:border-slate-800/10',
         };
       case 'member_removed':
         return {

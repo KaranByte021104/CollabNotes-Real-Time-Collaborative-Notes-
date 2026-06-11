@@ -204,13 +204,15 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     // 1. Apply client updates to server Y.Doc
     this.ydocStore.applyUpdate(noteId, updateBuffer);
 
-    // 2. Broadcast doc_update to others in the room
-    client.to(workspaceId).emit('doc_update', {
-      workspaceId,
-      noteId,
-      update: Array.from(updateBuffer),
-      updatedBy: { userId: user.userId, name: user.name },
-    });
+    if (updateBuffer.length > 2) {
+      // 2. Broadcast doc_update to others in the room
+      client.to(workspaceId).emit('doc_update', {
+        workspaceId,
+        noteId,
+        update: Array.from(updateBuffer),
+        updatedBy: { userId: user.userId, name: user.name },
+      });
+    }
 
     // 3. Send server's missing updates back to client (sync_complete)
     const serverUpdate = this.ydocStore.getUpdate(noteId, new Uint8Array(clientStateVector));
@@ -241,8 +243,10 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
       activityLogs: formattedLogs,
     });
 
-    // 5. Debounce save
-    this.scheduleDatabaseSave(noteId, user.userId, user.name, workspaceId);
+    // 5. Debounce save (only if there was an actual change)
+    if (updateBuffer.length > 2) {
+      this.scheduleDatabaseSave(noteId, user.userId, user.name, workspaceId);
+    }
   }
 
   @SubscribeMessage('doc_update')
@@ -262,6 +266,7 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     }
 
     const updateBuffer = new Uint8Array(update);
+    if (updateBuffer.length <= 2) return;
 
     // Apply to Y.Doc
     this.ydocStore.applyUpdate(noteId, updateBuffer);
@@ -332,7 +337,19 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
       const note = await this.noteRepository.findOne({ where: { id: noteId } });
 
       if (note) {
-        note.ydocState = Buffer.from(fullState);
+        const oldYdocState = note.ydocState;
+        const newYdocState = Buffer.from(fullState);
+
+        // Avoid database save and activity log if the state and content did not change
+        if (oldYdocState && oldYdocState.equals(newYdocState)) {
+          const snapshot = this.latestSnapshots.get(noteId);
+          if (!snapshot || note.content === snapshot) {
+            console.log(`Note ${noteId} had no changes. Skipping DB save & activity log.`);
+            return;
+          }
+        }
+
+        note.ydocState = newYdocState;
         const snapshot = this.latestSnapshots.get(noteId);
         if (snapshot) {
           note.content = snapshot;
